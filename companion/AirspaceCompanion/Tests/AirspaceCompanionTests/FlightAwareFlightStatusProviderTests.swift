@@ -185,17 +185,39 @@ final class FlightAwareFlightStatusProviderTests: XCTestCase {
             )
         }
 
-        let result = try await FlightAwareFlightStatusProvider(
+        let provider = FlightAwareFlightStatusProvider(
             apiKey: "test",
             session: session,
             now: { Date(timeIntervalSince1970: 1_785_600_000) }
-        ).trackedFlight(for: "YP113", on: nil)
+        )
+        let result = try await provider.trackedFlight(for: "YP113", on: nil)
+
+        // The normal lookup owns the exact route, schedule and gates. Live
+        // FlightAware position is intentionally reserved for the explicit
+        // five-minute telemetry fallback path.
+        XCTAssertNil(result.altitudeMeters)
+        XCTAssertNil(result.groundSpeedKPH)
+        XCTAssertNil(result.headingDegrees)
+
+        let fallbackResult = try await provider.fallbackTelemetry(
+            for: result,
+            on: nil,
+            matching: FlightLegSelection(
+                providerIdentifier: "APZ113-test",
+                originCode: "ICN",
+                destinationCode: "SFO",
+                scheduledDeparture: ISO8601DateFormatter().date(
+                    from: "2026-08-01T08:00:00Z"
+                )!
+            )
+        )
+        let telemetry = try XCTUnwrap(fallbackResult)
 
         // FlightAware position altitude is hundreds of feet and speed is kt.
-        XCTAssertEqual(result.altitudeMeters, 11_278)
-        XCTAssertEqual(result.groundSpeedKPH, 904)
-        XCTAssertEqual(result.headingDegrees, 83)
-        XCTAssertEqual(result.verticalPhase, "climbing")
+        XCTAssertEqual(telemetry.altitudeMeters, 11_278)
+        XCTAssertEqual(telemetry.groundSpeedKPH, 904)
+        XCTAssertEqual(telemetry.headingDegrees, 83)
+        XCTAssertEqual(telemetry.verticalPhase, "climbing")
         XCTAssertEqual(result.originTerminal, "1")
         XCTAssertEqual(result.originGate, "28")
         XCTAssertEqual(result.destinationTerminal, "I")
@@ -440,6 +462,163 @@ final class FlightAwareFlightStatusProviderTests: XCTestCase {
         )
         XCTAssertEqual(tracked.journeyPhase, "preflight")
         XCTAssertNil(tracked.actualArrival)
+    }
+
+    func testAirborneGateRefreshUsesDurationBasedCadence() async throws {
+        try await assertGateRefreshCadence(
+            marketingNumber: "WN7301",
+            providerIdentifier: "SWA7301-short-cadence",
+            scheduledArrival: "2026-08-08T10:00:00Z",
+            refreshAfter: 30 * 60
+        )
+        try await assertGateRefreshCadence(
+            marketingNumber: "WN7302",
+            providerIdentifier: "SWA7302-long-cadence",
+            scheduledArrival: "2026-08-08T13:00:00Z",
+            refreshAfter: 60 * 60
+        )
+    }
+
+    private func assertGateRefreshCadence(
+        marketingNumber: String,
+        providerIdentifier: String,
+        scheduledArrival: String,
+        refreshAfter: TimeInterval
+    ) async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [FlightAwareURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        let clock = LockedTestDate(
+            ISO8601DateFormatter().date(
+                from: "2026-08-08T08:30:00Z"
+            )!
+        )
+        let exactRequests = LockedTestCounter()
+        let ident = FlightAwareFlightStatusProvider.flightAwareIdent(
+            for: marketingNumber
+        )
+
+        FlightAwareURLProtocol.handler = { request in
+            let path = request.url?.path ?? ""
+            if path.contains("/airports/") {
+                let isOrigin = path.hasSuffix("/SAN")
+                let payload: [String: Any] = [
+                    "code_iata": isOrigin ? "SAN" : "SJC",
+                    "code_icao": isOrigin ? "KSAN" : "KSJC",
+                    "name": isOrigin ? "San Diego International" :
+                        "San Jose Mineta International",
+                    "city": isOrigin ? "San Diego" : "San Jose",
+                    "country_code": "US",
+                    "latitude": isOrigin ? 32.7338 : 37.3639,
+                    "longitude": isOrigin ? -117.1933 : -121.9289,
+                    "timezone": "America/Los_Angeles",
+                ]
+                return (
+                    HTTPURLResponse(
+                        url: request.url!,
+                        statusCode: 200,
+                        httpVersion: nil,
+                        headerFields: nil
+                    )!,
+                    try JSONSerialization.data(withJSONObject: payload)
+                )
+            }
+
+            let flight: [String: Any] = [
+                "ident": ident,
+                "ident_icao": ident,
+                "ident_iata": marketingNumber,
+                "fa_flight_id": providerIdentifier,
+                "cancelled": false,
+                "origin": ["code_iata": "SAN"],
+                "destination": ["code_iata": "SJC"],
+                "terminal_origin": "1",
+                "gate_origin": "12",
+                "terminal_destination": "B",
+                "gate_destination": "24",
+                "scheduled_out": "2026-08-08T08:00:00Z",
+                "actual_out": "2026-08-08T08:05:00Z",
+                "scheduled_in": scheduledArrival,
+                "estimated_in": scheduledArrival,
+                "status": "En Route",
+            ]
+            let payload: Any
+            if path.hasSuffix("/flights/\(providerIdentifier)") {
+                exactRequests.increment()
+                payload = flight
+            } else {
+                XCTAssertTrue(path.hasSuffix("/flights/\(ident)"))
+                payload = ["flights": [flight]]
+            }
+            return (
+                HTTPURLResponse(
+                    url: request.url!,
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!,
+                try JSONSerialization.data(withJSONObject: payload)
+            )
+        }
+
+        let provider = FlightAwareFlightStatusProvider(
+            apiKey: "test",
+            session: session,
+            now: { clock.value }
+        )
+        _ = try await provider.trackedFlight(
+            for: marketingNumber,
+            on: nil
+        )
+        XCTAssertEqual(exactRequests.value, 1)
+
+        clock.advance(by: refreshAfter - 60)
+        _ = try await provider.trackedFlight(
+            for: marketingNumber,
+            on: nil
+        )
+        XCTAssertEqual(exactRequests.value, 1)
+
+        clock.advance(by: 61)
+        _ = try await provider.trackedFlight(
+            for: marketingNumber,
+            on: nil
+        )
+        XCTAssertEqual(exactRequests.value, 2)
+    }
+}
+
+private final class LockedTestDate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storedValue: Date
+
+    init(_ value: Date) {
+        storedValue = value
+    }
+
+    var value: Date {
+        lock.withLock { storedValue }
+    }
+
+    func advance(by interval: TimeInterval) {
+        lock.withLock {
+            storedValue = storedValue.addingTimeInterval(interval)
+        }
+    }
+}
+
+private final class LockedTestCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storedValue = 0
+
+    var value: Int {
+        lock.withLock { storedValue }
+    }
+
+    func increment() {
+        lock.withLock {
+            storedValue += 1
+        }
     }
 }
 

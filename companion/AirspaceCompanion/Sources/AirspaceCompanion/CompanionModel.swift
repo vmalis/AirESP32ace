@@ -3092,7 +3092,8 @@ final class CompanionModel: ObservableObject {
             telemetryProvider: OpenSkyTrackedFlightTelemetryProvider(
                 clientID: openSkyClientID,
                 clientSecret: openSkyClientSecret
-            )
+            ),
+            fallbackTelemetryProvider: flightAwarePrimary
         )
     }
 

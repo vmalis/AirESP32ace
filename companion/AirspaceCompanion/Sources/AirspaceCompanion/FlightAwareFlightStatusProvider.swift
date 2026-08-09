@@ -4,7 +4,9 @@
 import CoreLocation
 import Foundation
 
-struct FlightAwareFlightStatusProvider: FlightLegProviding {
+struct FlightAwareFlightStatusProvider:
+    FlightLegProviding,
+    TrackedFlightFallbackTelemetryProviding {
     let apiKey: String
     var session: URLSession = .shared
     var now: @Sendable () -> Date = { Date() }
@@ -62,7 +64,6 @@ struct FlightAwareFlightStatusProvider: FlightLegProviding {
             from: flight.destination,
             fallback: .sfo
         )
-        let position = try await fetchPositionIfUseful(for: flight)
         try Self.validateDepartureDate(
             flight,
             selectedDate: selectedDate,
@@ -72,7 +73,7 @@ struct FlightAwareFlightStatusProvider: FlightLegProviding {
         let tracked = makeTrackedFlight(
             from: flight,
             requestedMarketingNumber: marketingNumber,
-            position: position,
+            position: nil,
             origin: resolvedOrigin,
             destination: resolvedDestination
         )
@@ -95,6 +96,57 @@ struct FlightAwareFlightStatusProvider: FlightLegProviding {
             )
         }
         return tracked
+    }
+
+    func fallbackTelemetry(
+        for trackedFlight: TrackedFlight,
+        on selectedDate: Date?,
+        matching selection: FlightLegSelection?
+    ) async throws -> TrackedFlightTelemetry? {
+        let position: FlightAwarePosition?
+        if let identifier = selection?.providerIdentifier,
+           !identifier.isEmpty {
+            position = try await fetchPosition(for: identifier)
+        } else {
+            let ident = Self.flightAwareIdent(
+                for: trackedFlight.marketingNumber
+            )
+            let response = try await fetchFlights(
+                ident: ident,
+                selectedDate: selectedDate
+            )
+            let inferredSelection = trackedFlight.scheduledDeparture.map {
+                FlightLegSelection(
+                    providerIdentifier: nil,
+                    originCode: trackedFlight.origin.code,
+                    destinationCode: trackedFlight.destination.code,
+                    scheduledDeparture: $0
+                )
+            }
+            guard let resolved = selectBestFlight(
+                from: response.flights,
+                now: now(),
+                selectedDate: selectedDate,
+                requestedMarketingNumber: trackedFlight.marketingNumber,
+                requestedIdent: ident,
+                selection: inferredSelection
+            ) else { return nil }
+            position = try await fetchPositionIfUseful(for: resolved)
+        }
+
+        guard let position else { return nil }
+        return TrackedFlightTelemetry(
+            coordinate: position.coordinate,
+            altitudeMeters: position.altitude.map {
+                Int(round(Double($0) * 100.0 * 0.3048))
+            },
+            groundSpeedKPH: position.groundspeed.map {
+                Int(round(Double($0) * 1.852))
+            },
+            headingDegrees: position.heading,
+            verticalPhase: Self.verticalPhase(position.altitudeChange),
+            updated: position.timestamp
+        )
     }
 
     func flightLegs(
@@ -421,6 +473,10 @@ struct FlightAwareFlightStatusProvider: FlightLegProviding {
             return nil
         }
 
+        return try await fetchPosition(for: id)
+    }
+
+    private func fetchPosition(for id: String) async throws -> FlightAwarePosition? {
         do {
             let envelope: PositionEnvelope = try await get("flights/\(id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id)/position")
             return envelope.bestPosition
@@ -434,12 +490,20 @@ struct FlightAwareFlightStatusProvider: FlightLegProviding {
     private func enrichExactOccurrenceIfUseful(
         _ flight: FlightAwareFlight
     ) async -> FlightAwareFlight {
-        guard Self.gateMetadataScore(flight) < 4,
+        let refreshNow = now()
+        let isAirborne = Self.effectiveStatus(
+            for: flight,
+            now: refreshNow
+        ) == "En Route"
+        guard (Self.gateMetadataScore(flight) < 4 || isAirborne),
               let id = flight.faFlightID,
               !id.isEmpty
         else { return flight }
 
-        let refreshNow = now()
+        let refreshInterval = Self.gateMetadataRefreshInterval(
+            for: flight,
+            at: refreshNow
+        )
         if let cached = await FlightAwareGateRefreshCache.shared.entry(
             for: id,
             now: refreshNow
@@ -470,7 +534,7 @@ struct FlightAwareFlightStatusProvider: FlightLegProviding {
                     nil,
                     for: id,
                     checkedAt: refreshNow,
-                    validFor: Self.gateMetadataRefreshInterval
+                    validFor: refreshInterval
                 )
                 return flight
             }
@@ -479,7 +543,7 @@ struct FlightAwareFlightStatusProvider: FlightLegProviding {
                 metadata.score > 0 ? metadata : nil,
                 for: id,
                 checkedAt: refreshNow,
-                validFor: Self.gateMetadataRefreshInterval
+                validFor: refreshInterval
             )
             guard Self.gateMetadataScore(exact) >
                     Self.gateMetadataScore(flight) else {
@@ -497,7 +561,7 @@ struct FlightAwareFlightStatusProvider: FlightLegProviding {
             case .httpStatus(402, _), .httpStatus(403, _):
                 validFor = Self.extendedDataDeniedBackoff
             default:
-                validFor = Self.gateMetadataRefreshInterval
+                validFor = refreshInterval
             }
             await FlightAwareGateRefreshCache.shared.store(
                 nil,
@@ -511,13 +575,23 @@ struct FlightAwareFlightStatusProvider: FlightLegProviding {
                 nil,
                 for: id,
                 checkedAt: refreshNow,
-                validFor: Self.gateMetadataRefreshInterval
+                validFor: refreshInterval
             )
             return flight
         }
     }
 
-    private static let gateMetadataRefreshInterval: TimeInterval = 30 * 60
+    private static func gateMetadataRefreshInterval(
+        for flight: FlightAwareFlight,
+        at now: Date
+    ) -> TimeInterval {
+        guard effectiveStatus(for: flight, now: now) == "En Route",
+              let departure = flight.bestDepartureDate,
+              let arrival = flight.bestArrivalDate,
+              arrival.timeIntervalSince(departure) > 3 * 3600
+        else { return 30 * 60 }
+        return 60 * 60
+    }
     private static let extendedDataDeniedBackoff: TimeInterval = 6 * 3600
 
     private static func applying(

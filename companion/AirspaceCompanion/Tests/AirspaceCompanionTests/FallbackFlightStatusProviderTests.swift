@@ -64,6 +64,141 @@ final class FallbackFlightStatusProviderTests: XCTestCase {
         XCTAssertEqual(result.routeProgress ?? -1, 0.629, accuracy: 0.02)
     }
 
+    func testCompleteOpenSkyTelemetryNeverUsesFlightAwarePosition() async throws {
+        let fallback = CountingFallbackTelemetryProvider(
+            telemetry: .fallbackSample
+        )
+        let provider = FallbackFlightStatusProvider(
+            primary: MissingTelemetryFlightProvider(),
+            telemetryProvider: ReturningTelemetryProvider(),
+            fallbackTelemetryProvider: fallback,
+            telemetryState: TrackedFlightTelemetryStateStore(),
+            now: { Date(timeIntervalSince1970: 1_320) }
+        )
+
+        let result = try await provider.trackedFlight(
+            for: "YP113",
+            on: nil
+        )
+
+        XCTAssertEqual(result.altitudeMeters, 11_120)
+        XCTAssertEqual(result.groundSpeedKPH, 914)
+        let fallbackCalls = await fallback.callCount
+        XCTAssertEqual(fallbackCalls, 0)
+    }
+
+    func testFlightAwareSeedsImmediatelyWhenOpenSkyHasNoBaseline() async throws {
+        let fallback = CountingFallbackTelemetryProvider(
+            telemetry: .fallbackSample
+        )
+        let provider = FallbackFlightStatusProvider(
+            primary: MissingTelemetryFlightProvider(),
+            fallbackTelemetryProvider: fallback,
+            telemetryState: TrackedFlightTelemetryStateStore(),
+            now: { Date(timeIntervalSince1970: 1_320) }
+        )
+
+        let result = try await provider.trackedFlight(
+            for: "YP113",
+            on: nil
+        )
+
+        XCTAssertEqual(result.altitudeMeters, 10_900)
+        XCTAssertEqual(result.groundSpeedKPH, 900)
+        XCTAssertEqual(result.headingDegrees, 84)
+        let fallbackCalls = await fallback.callCount
+        XCTAssertEqual(fallbackCalls, 1)
+    }
+
+    func testRetainsOpenSkyFieldsAndWaitsFiveMinutesBeforeFallback() async throws {
+        let state = TrackedFlightTelemetryStateStore()
+        let fallback = CountingFallbackTelemetryProvider(
+            telemetry: .fallbackSample
+        )
+
+        let initial = FallbackFlightStatusProvider(
+            primary: MissingTelemetryFlightProvider(),
+            telemetryProvider: ReturningTelemetryProvider(),
+            fallbackTelemetryProvider: fallback,
+            telemetryState: state,
+            now: { Date(timeIntervalSince1970: 1_320) }
+        )
+        _ = try await initial.trackedFlight(for: "YP113", on: nil)
+
+        let outageStart = FallbackFlightStatusProvider(
+            primary: MissingTelemetryFlightProvider(),
+            fallbackTelemetryProvider: fallback,
+            telemetryState: state,
+            now: { Date(timeIntervalSince1970: 1_400) }
+        )
+        let retained = try await outageStart.trackedFlight(
+            for: "YP113",
+            on: nil
+        )
+        XCTAssertEqual(retained.altitudeMeters, 11_120)
+        XCTAssertEqual(retained.groundSpeedKPH, 914)
+        XCTAssertEqual(retained.headingDegrees, 83)
+
+        let justBeforeFallback = FallbackFlightStatusProvider(
+            primary: MissingTelemetryFlightProvider(),
+            fallbackTelemetryProvider: fallback,
+            telemetryState: state,
+            now: { Date(timeIntervalSince1970: 1_699) }
+        )
+        _ = try await justBeforeFallback.trackedFlight(
+            for: "YP113",
+            on: nil
+        )
+        let callsBeforeDeadline = await fallback.callCount
+        XCTAssertEqual(callsBeforeDeadline, 0)
+
+        let fallbackDue = FallbackFlightStatusProvider(
+            primary: MissingTelemetryFlightProvider(),
+            fallbackTelemetryProvider: fallback,
+            telemetryState: state,
+            now: { Date(timeIntervalSince1970: 1_700) }
+        )
+        let refreshed = try await fallbackDue.trackedFlight(
+            for: "YP113",
+            on: nil
+        )
+        XCTAssertEqual(refreshed.altitudeMeters, 10_900)
+        XCTAssertEqual(refreshed.groundSpeedKPH, 900)
+        XCTAssertEqual(refreshed.headingDegrees, 84)
+        let callsAfterDeadline = await fallback.callCount
+        XCTAssertEqual(callsAfterDeadline, 1)
+    }
+
+    func testFailedFlightAwareFallbackStillConsumesCooldown() async throws {
+        let state = TrackedFlightTelemetryStateStore()
+        let fallback = CountingFallbackTelemetryProvider(
+            telemetry: nil,
+            error: FlightAwareProviderError.httpStatus(503, "Unavailable")
+        )
+
+        for timestamp in [1_320.0, 1_400.0] {
+            let provider = FallbackFlightStatusProvider(
+                primary: MissingTelemetryFlightProvider(),
+                fallbackTelemetryProvider: fallback,
+                telemetryState: state,
+                now: { Date(timeIntervalSince1970: timestamp) }
+            )
+            _ = try await provider.trackedFlight(for: "YP113", on: nil)
+        }
+        let callsDuringCooldown = await fallback.callCount
+        XCTAssertEqual(callsDuringCooldown, 1)
+
+        let retryDue = FallbackFlightStatusProvider(
+            primary: MissingTelemetryFlightProvider(),
+            fallbackTelemetryProvider: fallback,
+            telemetryState: state,
+            now: { Date(timeIntervalSince1970: 1_620) }
+        )
+        _ = try await retryDue.trackedFlight(for: "YP113", on: nil)
+        let callsAfterCooldown = await fallback.callCount
+        XCTAssertEqual(callsAfterCooldown, 2)
+    }
+
     func testSelectedLegUsesAirLabsOnlyToFillMissingGates() async throws {
         let departure = Date(timeIntervalSince1970: 10_000)
         let selection = FlightLegSelection(
@@ -892,6 +1027,39 @@ private struct ReturningTelemetryProvider: TrackedFlightTelemetryProviding {
             updated: Date(timeIntervalSince1970: 1_300)
         )
     }
+}
+
+private actor CountingFallbackTelemetryProvider:
+    TrackedFlightFallbackTelemetryProviding {
+    let telemetry: TrackedFlightTelemetry?
+    let error: Error?
+    private(set) var callCount = 0
+
+    init(telemetry: TrackedFlightTelemetry?, error: Error? = nil) {
+        self.telemetry = telemetry
+        self.error = error
+    }
+
+    func fallbackTelemetry(
+        for flight: TrackedFlight,
+        on date: Date?,
+        matching selection: FlightLegSelection?
+    ) async throws -> TrackedFlightTelemetry? {
+        callCount += 1
+        if let error { throw error }
+        return telemetry
+    }
+}
+
+private extension TrackedFlightTelemetry {
+    static let fallbackSample = TrackedFlightTelemetry(
+        coordinate: .init(latitude: 43.0, longitude: -160.0),
+        altitudeMeters: 10_900,
+        groundSpeedKPH: 900,
+        headingDegrees: 84,
+        verticalPhase: "cruising",
+        updated: Date(timeIntervalSince1970: 1_700)
+    )
 }
 
 private final class FlightFallbackURLProtocol: URLProtocol, @unchecked Sendable {

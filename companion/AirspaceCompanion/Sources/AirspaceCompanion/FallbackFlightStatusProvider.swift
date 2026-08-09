@@ -18,21 +18,200 @@ protocol TrackedFlightTelemetryProviding: Sendable {
         -> TrackedFlightTelemetry?
 }
 
+protocol TrackedFlightFallbackTelemetryProviding: Sendable {
+    func fallbackTelemetry(
+        for flight: TrackedFlight,
+        on date: Date?,
+        matching selection: FlightLegSelection?
+    ) async throws -> TrackedFlightTelemetry?
+}
+
+actor TrackedFlightTelemetryStateStore {
+    static let shared = TrackedFlightTelemetryStateStore()
+
+    struct Snapshot: Sendable {
+        let telemetry: TrackedFlightTelemetry
+        let source: String
+    }
+
+    private struct Entry: Sendable {
+        var telemetry: TrackedFlightTelemetry
+        var missingSince: Date?
+        var lastFallbackAttempt: Date?
+        var usedFallback = false
+        var source = "OpenSky"
+        var lastAccess: Date
+    }
+
+    private var entries: [String: Entry] = [:]
+
+    func ingestOpenSky(
+        _ telemetry: TrackedFlightTelemetry?,
+        for key: String,
+        at now: Date
+    ) -> Snapshot? {
+        prune(at: now)
+        var entry = entries[key] ?? Entry(
+            telemetry: .empty,
+            lastAccess: now
+        )
+        if let telemetry {
+            entry.telemetry = entry.telemetry.merging(telemetry)
+            if telemetry.hasRequiredMotion {
+                entry.source = "OpenSky"
+                entry.usedFallback = false
+            } else {
+                entry.source = entry.usedFallback
+                    ? "OpenSky + FlightAware telemetry"
+                    : "OpenSky"
+            }
+        }
+        entry.missingSince = telemetry?.hasRequiredMotion == true
+            ? nil
+            : (entry.missingSince ?? now)
+        entry.lastAccess = now
+        entries[key] = entry
+        return snapshot(entry)
+    }
+
+    func beginFallbackIfAllowed(
+        for key: String,
+        at now: Date,
+        interval: TimeInterval
+    ) -> Bool {
+        var entry = entries[key] ?? Entry(
+            telemetry: .empty,
+            missingSince: now,
+            lastAccess: now
+        )
+        if let lastAttempt = entry.lastFallbackAttempt,
+           now.timeIntervalSince(lastAttempt) < interval {
+            entry.lastAccess = now
+            entries[key] = entry
+            return false
+        }
+
+        let needsInitialSeed = !entry.telemetry.hasRequiredMotion
+        let outageMatured = entry.missingSince.map {
+            now.timeIntervalSince($0) >= interval
+        } ?? false
+        guard needsInitialSeed || outageMatured else {
+            entry.lastAccess = now
+            entries[key] = entry
+            return false
+        }
+
+        // Record the attempt before the network call. Failed requests still
+        // consume the five-minute allowance and cannot create a retry storm.
+        entry.lastFallbackAttempt = now
+        entry.lastAccess = now
+        entries[key] = entry
+        return true
+    }
+
+    func ingestFallback(
+        _ telemetry: TrackedFlightTelemetry,
+        for key: String,
+        at now: Date
+    ) -> Snapshot {
+        var entry = entries[key] ?? Entry(
+            telemetry: .empty,
+            missingSince: now,
+            lastAccess: now
+        )
+        entry.telemetry = entry.telemetry.merging(telemetry)
+        entry.usedFallback = true
+        entry.source = "FlightAware telemetry"
+        entry.lastAccess = now
+        entries[key] = entry
+        return snapshot(entry)!
+    }
+
+    func remove(_ key: String) {
+        entries[key] = nil
+    }
+
+    private func snapshot(_ entry: Entry) -> Snapshot? {
+        guard entry.telemetry.hasAnyMotion else { return nil }
+        return Snapshot(telemetry: entry.telemetry, source: entry.source)
+    }
+
+    private func prune(at now: Date) {
+        entries = entries.filter {
+            now.timeIntervalSince($0.value.lastAccess) < 24 * 3600
+        }
+    }
+}
+
+private extension TrackedFlightTelemetry {
+    static let empty = TrackedFlightTelemetry(
+        coordinate: nil,
+        altitudeMeters: nil,
+        groundSpeedKPH: nil,
+        headingDegrees: nil,
+        verticalPhase: nil,
+        updated: nil
+    )
+
+    var hasAnyMotion: Bool {
+        coordinate != nil || altitudeMeters != nil ||
+            groundSpeedKPH != nil || headingDegrees != nil
+    }
+
+    var hasRequiredMotion: Bool {
+        coordinate != nil && altitudeMeters != nil &&
+            groundSpeedKPH != nil && headingDegrees != nil
+    }
+
+    func merging(_ newer: TrackedFlightTelemetry) -> TrackedFlightTelemetry {
+        TrackedFlightTelemetry(
+            coordinate: newer.coordinate ?? coordinate,
+            altitudeMeters: newer.altitudeMeters ?? altitudeMeters,
+            groundSpeedKPH: newer.groundSpeedKPH ?? groundSpeedKPH,
+            headingDegrees: newer.headingDegrees ?? headingDegrees,
+            verticalPhase: newer.verticalPhase ?? verticalPhase,
+            updated: Self.newest(updated, newer.updated)
+        )
+    }
+
+    private static func newest(_ first: Date?, _ second: Date?) -> Date? {
+        switch (first, second) {
+        case (.some(let lhs), .some(let rhs)):
+            max(lhs, rhs)
+        case (.some(let value), .none), (.none, .some(let value)):
+            value
+        case (.none, .none):
+            nil
+        }
+    }
+}
+
 struct FallbackFlightStatusProvider: FlightLegProviding {
     let primary: any FlightStatusProviding
     let fallback: (any FlightStatusProviding)?
     let telemetryProvider: (any TrackedFlightTelemetryProviding)?
+    let fallbackTelemetryProvider:
+        (any TrackedFlightFallbackTelemetryProviding)?
+    let telemetryState: TrackedFlightTelemetryStateStore
+    let fallbackTelemetryInterval: TimeInterval
     var now: @Sendable () -> Date
 
     init(
         primary: any FlightStatusProviding,
         fallback: (any FlightStatusProviding)? = nil,
         telemetryProvider: (any TrackedFlightTelemetryProviding)? = nil,
+        fallbackTelemetryProvider:
+            (any TrackedFlightFallbackTelemetryProviding)? = nil,
+        telemetryState: TrackedFlightTelemetryStateStore = .shared,
+        fallbackTelemetryInterval: TimeInterval = 5 * 60,
         now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.primary = primary
         self.fallback = fallback
         self.telemetryProvider = telemetryProvider
+        self.fallbackTelemetryProvider = fallbackTelemetryProvider
+        self.telemetryState = telemetryState
+        self.fallbackTelemetryInterval = fallbackTelemetryInterval
         self.now = now
     }
 
@@ -89,21 +268,61 @@ struct FallbackFlightStatusProvider: FlightLegProviding {
                 }
             }
 
-            /* Once that exact flight is airborne, OpenSky owns only the live
-             * motion fields. */
+            /* Once that exact flight is airborne, OpenSky owns the live
+             * motion fields. Retain each last valid field independently so
+             * a sparse state vector never turns an already-known value into
+             * a dash. FlightAware position is a five-minute fallback only. */
+            let telemetryKey = Self.telemetryKey(
+                flight: resolved,
+                selection: selection
+            )
             if resolved.journeyPhase(at: now()) == "arrived" {
+                await telemetryState.remove(telemetryKey)
                 return resolved.normalizedForTerminalState(at: now())
             }
-            if Self.shouldUseLiveTelemetry(resolved, at: now()),
-               let telemetryProvider,
-               let telemetry = try? await telemetryProvider.telemetry(
-                    for: resolved
-               ),
-               Self.isFresh(telemetry, at: now()) {
-                resolved = Self.merging(
-                    primary: resolved,
-                    telemetry: telemetry
+            if Self.shouldUseLiveTelemetry(resolved, at: now()) {
+                let refreshNow = now()
+                var openSky: TrackedFlightTelemetry?
+                if let telemetryProvider,
+                   let candidate = try? await telemetryProvider.telemetry(
+                        for: resolved
+                   ),
+                   Self.isFresh(candidate, at: refreshNow) {
+                    openSky = candidate
+                }
+                var snapshot = await telemetryState.ingestOpenSky(
+                    openSky,
+                    for: telemetryKey,
+                    at: refreshNow
                 )
+
+                if let fallbackTelemetryProvider,
+                   await telemetryState.beginFallbackIfAllowed(
+                        for: telemetryKey,
+                        at: refreshNow,
+                        interval: fallbackTelemetryInterval
+                   ) {
+                    if let fallbackTelemetry = try? await
+                        fallbackTelemetryProvider.fallbackTelemetry(
+                            for: resolved,
+                            on: date,
+                            matching: selection
+                        ) {
+                        snapshot = await telemetryState.ingestFallback(
+                            fallbackTelemetry,
+                            for: telemetryKey,
+                            at: refreshNow
+                        )
+                    }
+                }
+
+                if let snapshot {
+                    resolved = Self.merging(
+                        primary: resolved,
+                        telemetry: snapshot.telemetry,
+                        source: snapshot.source
+                    )
+                }
             }
             return resolved.reconciledTerminalState(at: now())
         } catch {
@@ -194,6 +413,22 @@ struct FallbackFlightStatusProvider: FlightLegProviding {
         at now: Date
     ) -> Bool {
         flight.journeyPhase(at: now) == "enroute"
+    }
+
+    private static func telemetryKey(
+        flight: TrackedFlight,
+        selection: FlightLegSelection?
+    ) -> String {
+        let departure = selection?.scheduledDeparture ??
+            flight.scheduledDeparture ?? flight.actualDeparture ?? .distantPast
+        return [
+            FlightNumberIdentity.canonical(flight.marketingNumber),
+            selection?.providerIdentifier ?? "no-provider-id",
+            selection?.originCode.uppercased() ?? flight.origin.code.uppercased(),
+            selection?.destinationCode.uppercased() ??
+                flight.destination.code.uppercased(),
+            String(Int(departure.timeIntervalSince1970)),
+        ].joined(separator: "|")
     }
 
     private static func isFresh(
@@ -384,7 +619,8 @@ struct FallbackFlightStatusProvider: FlightLegProviding {
 
     private static func merging(
         primary: TrackedFlight,
-        telemetry: TrackedFlightTelemetry
+        telemetry: TrackedFlightTelemetry,
+        source: String
     ) -> TrackedFlight {
         let telemetryProgress = telemetry.coordinate.map {
             GreatCircle.nearestProgress(
@@ -413,7 +649,7 @@ struct FallbackFlightStatusProvider: FlightLegProviding {
             liveStatusSummary: primary.liveStatusSummary,
             dataSourceSummary: sourceSummary(
                 primary.dataSourceSummary,
-                adding: "OpenSky"
+                adding: source
             ),
             routeProgress: routeProgress,
             lastPosition: telemetry.coordinate ?? primary.lastPosition,
@@ -503,10 +739,17 @@ struct AirLabsOpenSkyFlightStatusProvider: FlightLegProviding {
             selectedDate: selectedDate,
             selection: selection
         )
+        let refreshNow = now()
         let record: AirLabsFlightRecord
         if let cached = await AirLabsFlightCache.shared.record(
             for: cacheKey,
-            newerThan: now().addingTimeInterval(-10 * 60)
+            at: refreshNow,
+            validFor: { cached in
+                Self.metadataRefreshInterval(
+                    for: cached,
+                    at: refreshNow
+                )
+            }
         ) {
             record = cached
         } else {
@@ -518,7 +761,7 @@ struct AirLabsOpenSkyFlightStatusProvider: FlightLegProviding {
             await AirLabsFlightCache.shared.store(
                 record,
                 for: cacheKey,
-                at: now()
+                at: refreshNow
             )
         }
 
@@ -1487,6 +1730,33 @@ struct AirLabsOpenSkyFlightStatusProvider: FlightLegProviding {
         return normalized
     }
 
+    private static func metadataRefreshInterval(
+        for record: AirLabsFlightRecord,
+        at now: Date
+    ) -> TimeInterval {
+        guard effectiveStatus(record, now: now) == "enroute" else {
+            return 10 * 60
+        }
+
+        let departure = record.departureActual ??
+            record.departureEstimated ?? record.departureScheduled
+        let arrival = record.arrivalEstimated ??
+            record.arrivalScheduled ?? record.arrivalActual
+
+        // Once the expected arrival is stale, return to the shorter terminal
+        // state check so a completed flight is not left airborne for an hour.
+        if let arrival, now >= arrival.addingTimeInterval(15 * 60) {
+            return 10 * 60
+        }
+
+        let duration = record.durationMinutes.map {
+            TimeInterval($0 * 60)
+        } ?? departure.flatMap { departure in
+            arrival.map { $0.timeIntervalSince(departure) }
+        }
+        return (duration ?? 0) > 3 * 3600 ? 60 * 60 : 30 * 60
+    }
+
     private static func displayStatus(_ status: String) -> String {
         switch status {
         case "enroute": "En route"
@@ -1764,8 +2034,14 @@ private actor AirLabsFlightCache {
     }
     private var entries: [String: Entry] = [:]
 
-    func record(for key: String, newerThan cutoff: Date) -> AirLabsFlightRecord? {
-        guard let entry = entries[key], entry.fetchedAt >= cutoff else { return nil }
+    func record(
+        for key: String,
+        at now: Date,
+        validFor: @Sendable (AirLabsFlightRecord) -> TimeInterval
+    ) -> AirLabsFlightRecord? {
+        guard let entry = entries[key],
+              now.timeIntervalSince(entry.fetchedAt) < validFor(entry.record)
+        else { return nil }
         return entry.record
     }
 
