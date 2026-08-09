@@ -1253,7 +1253,7 @@ private struct FlightWorkspace: View {
                     status: model.flightStatusText
                 )
             } else {
-                NothingToTrackCard()
+                NothingToTrackCard(status: model.flightStatusText)
             }
         }
         .sheet(item: $model.pendingFlightLegChoice) { choice in
@@ -1405,6 +1405,8 @@ struct FlightLegChooser: View {
 }
 
 private struct NothingToTrackCard: View {
+    let status: String
+
     var body: some View {
         VStack(spacing: 13) {
             Text("NOTHING TO TRACK")
@@ -1415,6 +1417,16 @@ private struct NothingToTrackCard: View {
             Text("Add a flight number and departure date above, then sync it to the device.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
+
+            if !status.isEmpty,
+               status != "Nothing to track. Add a flight number and date to begin." {
+                Text(status)
+                    .font(.caption)
+                    .foregroundStyle(status.hasPrefix("Looking up") ?
+                        RadarTheme.green : .orange)
+                    .multilineTextAlignment(.center)
+                    .textSelection(.enabled)
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 32)

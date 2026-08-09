@@ -1,6 +1,7 @@
 // AirESP32ace
 // Created by VM, August 2026
 
+import CoreLocation
 import XCTest
 @testable import AirspaceCompanion
 
@@ -112,7 +113,7 @@ final class PlannedFlightPriorityTests: XCTestCase {
         )
     }
 
-    func testCompletedFlightDoesNotRetainPriority() {
+    func testCompletedFlightOlderThanRetentionDoesNotRetainPriority() {
         let now = Date(timeIntervalSince1970: 2_000_000)
         var completed = plan(
             "YP111",
@@ -120,6 +121,7 @@ final class PlannedFlightPriorityTests: XCTestCase {
             arrival: now.addingTimeInterval(6 * 3600)
         )
         completed.isComplete = true
+        completed.actualArrival = now.addingTimeInterval(-3 * 3600)
         let next = plan(
             "OO3497",
             departure: now.addingTimeInterval(2 * 3600),
@@ -132,7 +134,7 @@ final class PlannedFlightPriorityTests: XCTestCase {
         )
     }
 
-    func testExplicitArrivalReleasesStickyFlight() {
+    func testRecentExplicitArrivalRemainsVisible() {
         let now = Date(timeIntervalSince1970: 2_000_000)
         var arrived = plan(
             "YP111",
@@ -152,8 +154,77 @@ final class PlannedFlightPriorityTests: XCTestCase {
                 currentPlanID: arrived.id,
                 at: now
             )?.id,
+            arrived.id
+        )
+    }
+
+    func testExplicitArrivalExpiresAfterTwoHours() {
+        let now = Date(timeIntervalSince1970: 2_000_000)
+        var arrived = plan(
+            "YP111",
+            departure: now.addingTimeInterval(-12 * 3600),
+            arrival: now.addingTimeInterval(-3 * 3600)
+        )
+        arrived.actualArrival = now.addingTimeInterval(-2 * 3600 - 1)
+        let next = plan(
+            "OO3497",
+            departure: now.addingTimeInterval(2 * 3600),
+            arrival: now.addingTimeInterval(5 * 3600)
+        )
+
+        XCTAssertEqual(
+            PlannedFlightPriority.select(
+                from: [arrived, next],
+                currentPlanID: arrived.id,
+                at: now
+            )?.id,
             next.id
         )
+        XCTAssertTrue(arrived.isExpiredAfterArrival(at: now))
+    }
+
+    func testCompletedRouteWithStaleEnRouteStatusIsReconciledAsArrived() {
+        let now = Date(timeIntervalSince1970: 2_000_000)
+        let eta = now.addingTimeInterval(-90 * 60)
+        let stale = trackedFlight(
+            status: "En route · 100%",
+            progress: 1,
+            departure: now.addingTimeInterval(-4 * 3600),
+            arrival: eta
+        )
+
+        XCTAssertEqual(stale.journeyPhase(at: now), "arrived")
+        let reconciled = stale.reconciledTerminalState(at: now)
+        XCTAssertEqual(reconciled.liveStatusSummary, "Arrived")
+        XCTAssertEqual(reconciled.routeProgress, 1)
+        XCTAssertEqual(reconciled.actualArrival, eta)
+        XCTAssertEqual(reconciled.altitudeMeters, 0)
+        XCTAssertEqual(reconciled.groundSpeedKPH, 0)
+        XCTAssertEqual(reconciled.verticalPhase, "landed")
+        XCTAssertEqual(reconciled.lastPosition, Airport.sfo.coordinate)
+        XCTAssertEqual(
+            reconciled.postArrivalExpiryDate(at: now),
+            eta.addingTimeInterval(2 * 3600)
+        )
+    }
+
+    func testTerminalInferenceDoesNotCompleteRecentOrPartialFlight() {
+        let now = Date(timeIntervalSince1970: 2_000_000)
+        let recent = trackedFlight(
+            status: "En route · 100%",
+            progress: 1,
+            departure: now.addingTimeInterval(-2 * 3600),
+            arrival: now.addingTimeInterval(-20 * 60)
+        )
+        let partial = trackedFlight(
+            status: "En route · 98%",
+            progress: 0.98,
+            departure: now.addingTimeInterval(-4 * 3600),
+            arrival: now.addingTimeInterval(-90 * 60)
+        )
+
+        XCTAssertEqual(recent.journeyPhase(at: now), "enroute")
+        XCTAssertEqual(partial.journeyPhase(at: now), "enroute")
     }
 
     func testScheduleRejectsOverlappingFlight() {
@@ -245,6 +316,44 @@ final class PlannedFlightPriorityTests: XCTestCase {
             flightNumber: number,
             departureDate: departure,
             scheduledDeparture: departure,
+            estimatedArrival: arrival
+        )
+    }
+
+    private func trackedFlight(
+        status: String,
+        progress: Double,
+        departure: Date,
+        arrival: Date
+    ) -> TrackedFlight {
+        TrackedFlight(
+            airlineName: "Southwest Airlines",
+            marketingNumber: "WN2622",
+            operationalCallsign: "SWA2622",
+            aircraftType: "Boeing 737-800",
+            aircraftTypeCode: "B738",
+            origin: Airport(
+                code: "SJC",
+                name: "San Jose Mineta International",
+                city: "San Jose",
+                coordinate: CLLocationCoordinate2D(latitude: 37.3639, longitude: -121.9289),
+                countryCode: "US",
+                timeZoneIdentifier: "America/Los_Angeles"
+            ),
+            destination: Airport.sfo,
+            scheduleSummary: "SJC → SFO",
+            durationSummary: "1h",
+            distanceSummary: "0 km",
+            liveStatusSummary: status,
+            dataSourceSummary: "FlightAware AeroAPI",
+            routeProgress: progress,
+            lastPosition: Airport.sfo.coordinate,
+            lastUpdated: departure,
+            altitudeMeters: 10_000,
+            groundSpeedKPH: 800,
+            headingDegrees: 310,
+            verticalPhase: "cruise",
+            actualDeparture: departure,
             estimatedArrival: arrival
         )
     }

@@ -1221,7 +1221,7 @@ final class CompanionModel: ObservableObject {
                 number: plan.flightNumber,
                 date: plan.departureDate,
                 selection: plan.legSelection
-            )
+            ).reconciledTerminalState(at: Date())
             resolvedFlights[id] = flight
             updatePlan(at: planIndex, with: flight)
             refreshActiveFlightSelection()
@@ -1325,11 +1325,7 @@ final class CompanionModel: ObservableObject {
     }
 
     private func activate(_ flight: TrackedFlight) {
-        let displayFlight = flight.journeyPhase == "arrived"
-            ? flight.normalizedForTerminalState(
-                at: flight.actualArrival ?? Date()
-            )
-            : flight
+        let displayFlight = flight.reconciledTerminalState(at: Date())
         trackedFlight = displayFlight
         trackedFlightTrackingActive =
             displayFlight.isActivelyTrackable ||
@@ -1342,15 +1338,30 @@ final class CompanionModel: ObservableObject {
     }
 
     private func refreshActiveFlightSelection() {
+        let now = Date()
+        let expiredIDs = Set(
+            flightPlans
+                .filter { $0.isExpiredAfterArrival(at: now) }
+                .map(\.id)
+        )
+        if !expiredIDs.isEmpty {
+            flightPlans.removeAll { expiredIDs.contains($0.id) }
+            for id in expiredIDs {
+                resolvedFlights[id] = nil
+            }
+            persistFlightPlans()
+        }
         let selected = PlannedFlightPriority.select(
             from: flightPlans,
-            currentPlanID: activeFlightPlanID
+            currentPlanID: activeFlightPlanID,
+            at: now
         )
         activeFlightPlanID = selected?.id
         if let id = selected?.id, let flight = resolvedFlights[id] {
             activate(flight)
         } else {
-            trackedFlightTrackingActive = false
+            resetTrackedFlightPreview()
+            flightStatusText = "Nothing to track. Add a flight number and date to begin."
         }
         persistSharedConfiguration()
     }
@@ -1395,6 +1406,11 @@ final class CompanionModel: ObservableObject {
             while !Task.isCancelled {
                 guard let self else { return }
                 guard let cadence = self.nextTrackedFlightPollCadence() else {
+                    self.refreshActiveFlightSelection()
+                    if self.activePlan != nil {
+                        self.startTrackedFlightPolling()
+                        return
+                    }
                     self.trackedFlightPollingText = "Nothing to track · polling complete"
                     UserDefaults.standard.set(
                         false,
@@ -1436,8 +1452,22 @@ final class CompanionModel: ObservableObject {
         shouldFetch: Bool,
         label: String
     )? {
+        if let plan = activePlan, resolvedFlights[plan.id] == nil {
+            return (
+                1,
+                true,
+                "Fetching \(plan.flightNumber)…"
+            )
+        }
         if trackedFlight.journeyPhase == "arrived" {
-            return nil
+            guard let expiry = trackedFlight.postArrivalExpiryDate(),
+                  expiry > Date()
+            else { return nil }
+            return (
+                max(1, expiry.timeIntervalSinceNow),
+                false,
+                "Landed · available for two hours"
+            )
         }
         if !trackedFlightTrackingActive {
             guard let plan = activePlan, !plan.isComplete else {

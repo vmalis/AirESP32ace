@@ -434,6 +434,176 @@ final class FallbackFlightStatusProviderTests: XCTestCase {
         XCTAssertEqual(result.destinationTerminal, "I")
         XCTAssertEqual(result.destinationGate, "A6")
     }
+
+    func testFutureRecurringWN3568OffersBothFridayLegs() async throws {
+        var selectedCalendar = Calendar(identifier: .gregorian)
+        selectedCalendar.timeZone = TimeZone(
+            identifier: "America/Los_Angeles"
+        )!
+        let selectedDate = selectedCalendar.date(
+            from: DateComponents(
+                year: 2026,
+                month: 8,
+                day: 14,
+                hour: 12
+            )
+        )!
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [FlightFallbackURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+
+        FlightFallbackURLProtocol.handler = { request in
+            let path = request.url?.path ?? ""
+            if path.hasSuffix("/schedules") {
+                return Self.jsonResponse(
+                    request,
+                    object: ["response": []]
+                )
+            }
+            if path.hasSuffix("/routes") {
+                let routes: [[String: Any]] = [
+                    [
+                        "flight_iata": "WN3568",
+                        "flight_icao": "SWA3568",
+                        "airline_iata": "WN",
+                        "dep_iata": "SJC",
+                        "arr_iata": "BNA",
+                        "dep_time": "07:00",
+                        "arr_time": "13:20",
+                        "days": ["thu", "fri"],
+                    ],
+                    [
+                        "flight_iata": "WN3568",
+                        "flight_icao": "SWA3568",
+                        "airline_iata": "WN",
+                        "dep_iata": "SAT",
+                        "arr_iata": "DEN",
+                        "dep_time": "18:30",
+                        "arr_time": "20:00",
+                        "days": "mon,thu,fri",
+                    ],
+                    [
+                        "flight_iata": "WN3568",
+                        "flight_icao": "SWA3568",
+                        "airline_iata": "WN",
+                        "dep_iata": "LAS",
+                        "arr_iata": "PHX",
+                        "dep_time": "09:00",
+                        "arr_time": "10:10",
+                        "days": ["sat"],
+                    ],
+                ]
+                return Self.jsonResponse(
+                    request,
+                    object: ["response": routes]
+                )
+            }
+            if path.hasSuffix("/airports") {
+                let iata = URLComponents(
+                    url: request.url!,
+                    resolvingAgainstBaseURL: false
+                )?.queryItems?.first(where: {
+                    $0.name == "iata_code"
+                })?.value ?? ""
+                let airports: [String: [String: Any]] = [
+                    "SJC": [
+                        "name": "San Jose International Airport",
+                        "iata_code": "SJC",
+                        "lat": 37.3639,
+                        "lng": -121.9289,
+                        "city": "San Jose",
+                        "timezone": "America/Los_Angeles",
+                        "country_code": "US",
+                    ],
+                    "BNA": [
+                        "name": "Nashville International Airport",
+                        "iata_code": "BNA",
+                        "lat": 36.1263,
+                        "lng": -86.6774,
+                        "city": "Nashville",
+                        "timezone": "America/Chicago",
+                        "country_code": "US",
+                    ],
+                    "SAT": [
+                        "name": "San Antonio International Airport",
+                        "iata_code": "SAT",
+                        "lat": 29.5337,
+                        "lng": -98.4698,
+                        "city": "San Antonio",
+                        "timezone": "America/Chicago",
+                        "country_code": "US",
+                    ],
+                    "DEN": [
+                        "name": "Denver International Airport",
+                        "iata_code": "DEN",
+                        "lat": 39.8561,
+                        "lng": -104.6737,
+                        "city": "Denver",
+                        "timezone": "America/Denver",
+                        "country_code": "US",
+                    ],
+                ]
+                return Self.jsonResponse(
+                    request,
+                    object: ["response": airports[iata].map { [$0] } ?? []]
+                )
+            }
+            if path.hasSuffix("/flights") {
+                return Self.jsonResponse(
+                    request,
+                    object: ["response": []]
+                )
+            }
+            XCTFail("Unexpected request: \(request.url?.absoluteString ?? "")")
+            return Self.jsonResponse(request, object: ["response": []])
+        }
+
+        let provider = AirLabsOpenSkyFlightStatusProvider(
+            apiKey: "airlabs-test",
+            openSkyClientID: "",
+            openSkyClientSecret: "",
+            session: session,
+            now: { selectedDate }
+        )
+        let legs = try await provider.flightLegs(
+            for: "WN3568",
+            on: selectedDate
+        )
+
+        XCTAssertEqual(legs.count, 2)
+        XCTAssertEqual(
+            Set(legs.map { "\($0.originCode)-\($0.destinationCode)" }),
+            Set(["SJC-BNA", "SAT-DEN"])
+        )
+
+        let chosen = try XCTUnwrap(legs.first(where: {
+            $0.originCode == "SJC" && $0.destinationCode == "BNA"
+        }))
+        let tracked = try await provider.trackedFlight(
+            for: "WN3568",
+            on: selectedDate,
+            matching: chosen.selection
+        )
+        XCTAssertEqual(tracked.marketingNumber, "WN3568")
+        XCTAssertEqual(tracked.origin.code, "SJC")
+        XCTAssertEqual(tracked.destination.code, "BNA")
+        XCTAssertEqual(tracked.dataSourceSummary, "AirLabs fallback")
+    }
+
+    private static func jsonResponse(
+        _ request: URLRequest,
+        object: Any
+    ) -> (HTTPURLResponse, Data) {
+        (
+            HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!,
+            try! JSONSerialization.data(withJSONObject: object)
+        )
+    }
 }
 
 private struct ThrowingFlightProvider: FlightStatusProviding {

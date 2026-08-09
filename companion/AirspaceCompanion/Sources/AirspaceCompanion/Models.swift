@@ -100,9 +100,16 @@ struct TrackedFlight: Identifiable, Hashable, Codable {
     var destinationGate: String? = nil
 
     var journeyPhase: String {
+        journeyPhase(at: Date())
+    }
+
+    func journeyPhase(at now: Date) -> String {
         if actualArrival != nil ||
             liveStatusSummary.localizedCaseInsensitiveContains("arrived") ||
             liveStatusSummary.localizedCaseInsensitiveContains("landed") {
+            return "arrived"
+        }
+        if hasInferredTerminalState(at: now) {
             return "arrived"
         }
         if actualDeparture != nil ||
@@ -114,7 +121,7 @@ struct TrackedFlight: Identifiable, Hashable, Codable {
     }
 
     var isActivelyTrackable: Bool {
-        guard actualArrival == nil else { return false }
+        guard journeyPhase != "arrived" else { return false }
         let normalizedStatus = liveStatusSummary.lowercased()
         return !normalizedStatus.contains("arrived")
             && !normalizedStatus.contains("landed")
@@ -141,6 +148,67 @@ struct TrackedFlight: Identifiable, Hashable, Codable {
 }
 
 extension TrackedFlight {
+    static let postArrivalRetentionInterval: TimeInterval = 2 * 3600
+
+    /// The tracker remains available briefly after touchdown so the landed
+    /// state can still be reviewed. Prefer the provider's actual arrival and
+    /// fall back to its ETA when the free-tier response omits that timestamp.
+    func postArrivalExpiryDate(at now: Date = Date()) -> Date? {
+        guard journeyPhase(at: now) == "arrived" else { return nil }
+        guard let arrival = actualArrival ?? estimatedArrival ?? lastUpdated else {
+            return nil
+        }
+        return arrival.addingTimeInterval(Self.postArrivalRetentionInterval)
+    }
+
+    func isExpiredAfterArrival(at now: Date = Date()) -> Bool {
+        guard let expiry = postArrivalExpiryDate(at: now) else { return false }
+        return now >= expiry
+    }
+
+    /// Some free-tier provider records can keep reporting `en route` after
+    /// their last live occurrence has ended.  Treat a flight as terminal only
+    /// when the selected occurrence has started, its route has reached the
+    /// destination, and its best ETA has been behind us for a conservative
+    /// grace period.  This deliberately does not trust the status string or
+    /// schedule clock alone, which protects delayed and future flights.
+    func hasInferredTerminalState(
+        at now: Date,
+        gracePeriod: TimeInterval = 30 * 60
+    ) -> Bool {
+        guard actualArrival == nil,
+              let progress = routeProgress,
+              progress >= 0.995,
+              let expectedArrival = estimatedArrival,
+              now.timeIntervalSince(expectedArrival) >= gracePeriod
+        else { return false }
+
+        let normalizedStatus = liveStatusSummary.lowercased()
+        guard !normalizedStatus.contains("cancelled"),
+              !normalizedStatus.contains("canceled")
+        else { return false }
+
+        return actualDeparture != nil ||
+            normalizedStatus.contains("en route") ||
+            normalizedStatus.contains("enroute") ||
+            normalizedStatus.contains("airborne")
+    }
+
+    /// Reconciles the inferred phase into concrete values before the flight is
+    /// cached, rendered, or sent to the instrument.  Every tracked-flight view
+    /// therefore receives the same landed state.
+    func reconciledTerminalState(at now: Date = Date()) -> TrackedFlight {
+        guard journeyPhase(at: now) == "arrived" else { return self }
+        let normalizedStatus = liveStatusSummary.lowercased()
+        let hasExplicitTerminalStatus =
+            normalizedStatus.contains("arrived") ||
+            normalizedStatus.contains("landed")
+        return normalizedForTerminalState(
+            status: hasExplicitTerminalStatus ? liveStatusSummary : "Arrived",
+            at: actualArrival ?? estimatedArrival ?? now
+        )
+    }
+
     /// Makes the terminal state internally consistent at every provider and
     /// transport boundary. A landed flight must never retain an older
     /// airborne coordinate or a fractional route progress value.
@@ -186,6 +254,8 @@ extension TrackedFlight {
 }
 
 struct PlannedFlight: Codable, Identifiable, Hashable {
+    static let postArrivalRetentionInterval: TimeInterval = 2 * 3600
+
     let id: UUID
     var flightNumber: String
     var departureDate: Date
@@ -277,14 +347,46 @@ struct PlannedFlight: Codable, Identifiable, Hashable {
     }
 
     var isTerminal: Bool {
-        if isComplete || actualArrival != nil {
+        if hasArrived || isCancelled {
+            return true
+        }
+        return false
+    }
+
+    var hasArrived: Bool {
+        if actualArrival != nil {
             return true
         }
         let normalized = statusSummary.lowercased()
         return normalized.contains("arrived") ||
             normalized.contains("landed") ||
-            normalized.contains("cancelled") ||
+            (isComplete && !isCancelled)
+    }
+
+    var isCancelled: Bool {
+        let normalized = statusSummary.lowercased()
+        return normalized.contains("cancelled") ||
             normalized.contains("canceled")
+    }
+
+    var arrivalReferenceDate: Date? {
+        guard hasArrived else { return nil }
+        return actualArrival ?? estimatedArrival ?? lastRefreshed
+    }
+
+    func isWithinPostArrivalRetention(at now: Date = Date()) -> Bool {
+        guard let arrivalReferenceDate else { return hasArrived }
+        return now < arrivalReferenceDate.addingTimeInterval(
+            Self.postArrivalRetentionInterval
+        )
+    }
+
+    func isExpiredAfterArrival(at now: Date = Date()) -> Bool {
+        guard let arrivalReferenceDate else { return false }
+        return hasArrived &&
+            now >= arrivalReferenceDate.addingTimeInterval(
+                Self.postArrivalRetentionInterval
+            )
     }
 }
 
@@ -295,7 +397,14 @@ enum PlannedFlightPriority {
         at now: Date = Date()
     ) -> PlannedFlight? {
         let available = plans.filter { !$0.isTerminal }
-        guard !available.isEmpty else { return nil }
+        let retainedArrivals = plans.filter {
+            $0.hasArrived && $0.isWithinPostArrivalRetention(at: now)
+        }
+
+        if let currentPlanID,
+           let landed = retainedArrivals.first(where: { $0.id == currentPlanID }) {
+            return landed
+        }
 
         // Once a flight owns the tracker it stays there until a provider
         // explicitly reports a terminal state. Schedule estimates must never
@@ -305,6 +414,17 @@ enum PlannedFlightPriority {
            current.actualDeparture != nil || current.effectiveDeparture <= now {
             return current
         }
+
+        // Keep the most recently landed flight visible for two hours, even
+        // after an app restart, before moving to the next scheduled flight.
+        if let landed = retainedArrivals.max(by: {
+            ($0.arrivalReferenceDate ?? .distantPast) <
+                ($1.arrivalReferenceDate ?? .distantPast)
+        }) {
+            return landed
+        }
+
+        guard !available.isEmpty else { return nil }
 
         let underway = available.filter {
             $0.effectiveDeparture <= now && now < $0.effectiveArrival

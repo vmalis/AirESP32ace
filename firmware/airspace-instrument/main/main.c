@@ -232,6 +232,7 @@ typedef struct {
 
 static app_screen_t current_screen = SCREEN_RADAR;
 static tracked_flight_view_t tracked_flight_view = TRACKED_FLIGHT_GLOBE;
+static bool tracked_post_arrival_expiry_rendered;
 static bool render_requested = true;
 static bool aircraft_detail_active;
 static bool boot_was_pressed;
@@ -6892,6 +6893,104 @@ typedef struct {
     char value[2][24];
 } tracked_time_pair_t;
 
+#define TRACKED_POST_ARRIVAL_RETENTION_SECONDS (2 * 60 * 60)
+
+/* Free-tier schedule records occasionally retain an airborne status after the
+ * final live occurrence has disappeared.  Keep this inference deliberately
+ * conservative: the selected occurrence must have started, reached the route
+ * endpoint, and be at least 30 minutes beyond its ETA. */
+static bool tracked_is_terminal(
+    const app_remote_status_t *remote,
+    int64_t now)
+{
+    if (remote == NULL) {
+        return false;
+    }
+    if (remote->tracked_flight_actual_arrival_unix > 0 ||
+        strcasecmp(
+            remote->tracked_flight_journey_phase,
+            "arrived") == 0 ||
+        strcasecmp(
+            remote->tracked_flight_journey_phase,
+            "landed") == 0 ||
+        strcasecmp(
+            remote->tracked_flight_phase,
+            "landed") == 0) {
+        return true;
+    }
+    if (strcasecmp(remote->tracked_flight_status, "cancelled") == 0 ||
+        strcasecmp(remote->tracked_flight_status, "canceled") == 0) {
+        return false;
+    }
+    const bool occurrence_started =
+        remote->tracked_flight_actual_departure_unix > 0 ||
+        strcasecmp(
+            remote->tracked_flight_journey_phase,
+            "enroute") == 0 ||
+        strcasecmp(
+            remote->tracked_flight_journey_phase,
+            "airborne") == 0;
+    return occurrence_started &&
+        remote->route_progress >= 0.995f &&
+        remote->tracked_flight_estimated_arrival_unix > 0 &&
+        now >= remote->tracked_flight_estimated_arrival_unix + 30 * 60;
+}
+
+static int64_t tracked_terminal_reference_time(
+    const app_remote_status_t *remote,
+    int64_t now)
+{
+    if (!tracked_is_terminal(remote, now)) {
+        return 0;
+    }
+    if (remote->tracked_flight_actual_arrival_unix > 0) {
+        return remote->tracked_flight_actual_arrival_unix;
+    }
+    return remote->tracked_flight_estimated_arrival_unix;
+}
+
+static bool tracked_is_expired_after_arrival(
+    const app_remote_status_t *remote,
+    int64_t now)
+{
+    const int64_t arrival = tracked_terminal_reference_time(remote, now);
+    return arrival > 0 &&
+        now >= arrival + TRACKED_POST_ARRIVAL_RETENTION_SECONDS;
+}
+
+/* Normalize only the local render snapshot.  Persisted provider data remains
+ * intact, while every tracker view consumes one consistent terminal state. */
+static void tracked_reconcile_terminal_snapshot(
+    app_remote_status_t *remote,
+    int64_t now)
+{
+    if (!tracked_is_terminal(remote, now)) {
+        return;
+    }
+    snprintf(
+        remote->tracked_flight_journey_phase,
+        sizeof(remote->tracked_flight_journey_phase),
+        "arrived");
+    snprintf(
+        remote->tracked_flight_phase,
+        sizeof(remote->tracked_flight_phase),
+        "landed");
+    snprintf(
+        remote->tracked_flight_remaining,
+        sizeof(remote->tracked_flight_remaining),
+        "0m");
+    remote->route_progress = 1.0f;
+    remote->tracked_flight_altitude_m = 0;
+    remote->tracked_flight_speed_kph = 0;
+    if (remote->tracked_flight_actual_arrival_unix <= 0) {
+        remote->tracked_flight_actual_arrival_unix =
+            remote->tracked_flight_estimated_arrival_unix;
+    }
+    if (tracked_is_expired_after_arrival(remote, now)) {
+        remote->tracked_flight_valid = false;
+    }
+}
+
 static bool tracked_is_preflight(
     const app_remote_status_t *remote)
 {
@@ -8532,6 +8631,22 @@ static void handle_tracked_time_rotation(void)
         return;
     }
 
+    app_remote_status_t expiry_status;
+    app_remote_get_status(&expiry_status);
+    const bool had_tracked_flight = expiry_status.tracked_flight_valid;
+    tracked_reconcile_terminal_snapshot(
+        &expiry_status,
+        (int64_t)time(NULL));
+    if (had_tracked_flight && !expiry_status.tracked_flight_valid) {
+        if (!tracked_post_arrival_expiry_rendered) {
+            tracked_post_arrival_expiry_rendered = true;
+            tracked_flight_view = TRACKED_FLIGHT_GLOBE;
+            render_requested = true;
+        }
+        return;
+    }
+    tracked_post_arrival_expiry_rendered = false;
+
     /* The scheduled-flight screen returns before the normal rotating time
      * panels are prepared.  Keep its countdown alive independently and
      * update only the label, leaving the map and logo untouched. */
@@ -8761,6 +8876,9 @@ static void render_tracked_flight(void)
 {
     app_remote_status_t remote;
     app_remote_get_status(&remote);
+    tracked_reconcile_terminal_snapshot(
+        &remote,
+        (int64_t)time(NULL));
     if (!remote.tracked_flight_valid) {
         render_tracked_no_scheduled_flight();
         tracked_panels_entry_animation_pending = false;
@@ -20672,6 +20790,9 @@ static void render_tracked_flight_detail(void)
 {
     app_remote_status_t remote;
     app_remote_get_status(&remote);
+    tracked_reconcile_terminal_snapshot(
+        &remote,
+        (int64_t)time(NULL));
     draw_shell();
 
     if (!remote.tracked_flight_valid) {
@@ -20780,17 +20901,9 @@ static void render_tracked_flight_detail(void)
         166,
         360);
 
-    const bool landed =
-        remote.tracked_flight_actual_arrival_unix > 0 ||
-        strcasecmp(
-            remote.tracked_flight_journey_phase,
-            "arrived") == 0 ||
-        strcasecmp(
-            remote.tracked_flight_journey_phase,
-            "landed") == 0 ||
-        strcasecmp(
-            remote.tracked_flight_phase,
-            "landed") == 0;
+    const bool landed = tracked_is_terminal(
+        &remote,
+        (int64_t)time(NULL));
     const bool show_route_marker =
         !tracked_is_preflight(&remote) && !landed;
     detail_draw_route(
@@ -22099,6 +22212,9 @@ static void handle_input(void)
             abs_dy > abs_dx) {
             app_remote_status_t tracked_status;
             app_remote_get_status(&tracked_status);
+            tracked_reconcile_terminal_snapshot(
+                &tracked_status,
+                (int64_t)time(NULL));
             if (!tracked_status.tracked_flight_valid ||
                 tracked_should_show_countdown(&tracked_status)) {
                 /* The empty and scheduled-countdown states are deliberately

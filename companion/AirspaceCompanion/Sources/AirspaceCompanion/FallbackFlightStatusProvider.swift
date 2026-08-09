@@ -91,7 +91,7 @@ struct FallbackFlightStatusProvider: FlightLegProviding {
                     telemetry: telemetry
                 )
             }
-            return resolved
+            return resolved.reconciledTerminalState(at: now())
         } catch {
             let primaryError = error
             FileHandle.standardError.write(Data(
@@ -108,9 +108,7 @@ struct FallbackFlightStatusProvider: FlightLegProviding {
                     date: date,
                     selection: selection
                 )
-                return resolved.journeyPhase == "arrived"
-                    ? resolved.normalizedForTerminalState(at: now())
-                    : resolved
+                return resolved.reconciledTerminalState(at: now())
             } catch FlightProviderError.noLiveFlight {
                 throw FlightProviderError.noLiveFlight(marketingNumber)
             } catch {
@@ -397,7 +395,7 @@ struct AirLabsOpenSkyFlightStatusProvider: FlightLegProviding {
         ) {
             record = cached
         } else {
-            record = try await fetchFlight(
+            record = try await fetchFlightWithRouteFallback(
                 normalized,
                 selectedDate: selectedDate,
                 selection: selection
@@ -588,6 +586,35 @@ struct AirLabsOpenSkyFlightStatusProvider: FlightLegProviding {
     ) async throws -> [FlightLegCandidate] {
         let normalized = Self.normalizedFlightNumber(marketingNumber)
         let records = try await datedScheduleRecords(normalized)
+        var legs = await legCandidates(
+            from: records,
+            marketingNumber: normalized,
+            selectedDate: selectedDate,
+            providerIdentifierPrefix: nil
+        )
+        if legs.isEmpty {
+            let routes = try await recurringRouteRecords(
+                normalized,
+                selectedDate: selectedDate
+            )
+            legs = await legCandidates(
+                from: routes,
+                marketingNumber: normalized,
+                selectedDate: selectedDate,
+                providerIdentifierPrefix: "airlabs-route"
+            )
+        }
+        return Array(Dictionary(grouping: legs, by: \.id).compactMap {
+            $0.value.first
+        }).sorted { $0.scheduledDeparture < $1.scheduledDeparture }
+    }
+
+    private func legCandidates(
+        from records: [AirLabsFlightRecord],
+        marketingNumber: String,
+        selectedDate: Date,
+        providerIdentifierPrefix: String?
+    ) async -> [FlightLegCandidate] {
         var legs: [FlightLegCandidate] = []
         for record in records {
             guard let departure = Self.preferredDeparture(record),
@@ -608,26 +635,58 @@ struct AirLabsOpenSkyFlightStatusProvider: FlightLegProviding {
             let status = Self.effectiveStatus(record, now: now())
             let complete = status == "arrived"
             let identity = [
-                normalized,
+                marketingNumber,
                 originCode.uppercased(),
                 destinationCode.uppercased(),
                 String(Int(departure.timeIntervalSince1970)),
             ].joined(separator: "|")
             legs.append(FlightLegCandidate(
                 id: identity,
-                marketingNumber: normalized,
+                marketingNumber: marketingNumber,
                 originCode: originCode.uppercased(),
                 destinationCode: destinationCode.uppercased(),
                 scheduledDeparture: departure,
                 departureTimeZoneIdentifier: origin.timeZoneIdentifier,
                 statusSummary: Self.displayStatus(status),
                 isComplete: complete,
-                providerIdentifier: nil
+                providerIdentifier: providerIdentifierPrefix.map {
+                    "\($0):\(identity)"
+                }
             ))
         }
-        return Array(Dictionary(grouping: legs, by: \.id).compactMap {
-            $0.value.first
-        }).sorted { $0.scheduledDeparture < $1.scheduledDeparture }
+        return legs
+    }
+
+    private func fetchFlightWithRouteFallback(
+        _ marketingNumber: String,
+        selectedDate: Date?,
+        selection: FlightLegSelection?
+    ) async throws -> AirLabsFlightRecord {
+        do {
+            return try await fetchFlight(
+                marketingNumber,
+                selectedDate: selectedDate,
+                selection: selection
+            )
+        } catch FlightProviderError.noLiveFlight {
+            guard let selectedDate else { throw FlightProviderError.noLiveFlight(marketingNumber) }
+            let routes = try await recurringRouteRecords(
+                marketingNumber,
+                selectedDate: selectedDate
+            )
+            if let selection,
+               let exact = routes.first(where: {
+                   Self.matches($0, selection: selection)
+               }) {
+                return exact
+            }
+            guard selection == nil, routes.count == 1,
+                  let onlyRoute = routes.first
+            else {
+                throw FlightProviderError.noLiveFlight(marketingNumber)
+            }
+            return onlyRoute
+        }
     }
 
     private func fetchFlight(
@@ -730,6 +789,134 @@ struct AirLabsOpenSkyFlightStatusProvider: FlightLegProviding {
                 (Self.preferredDeparture($0) ?? .distantFuture) <
                     (Self.preferredDeparture($1) ?? .distantFuture)
             }
+    }
+
+    /// AirLabs' free dated schedule feed has a short forward-looking window.
+    /// Its route catalog still describes recurring operations beyond that
+    /// window, so use it only to prepare a provisional future flight. The
+    /// ordinary provider cascade replaces this record with precise schedule,
+    /// gate and aircraft data as the departure gets closer.
+    private func recurringRouteRecords(
+        _ marketingNumber: String,
+        selectedDate: Date
+    ) async throws -> [AirLabsFlightRecord] {
+        let rows = try await airLabsArray(
+            path: "routes",
+            queryItems: [
+                URLQueryItem(name: "flight_iata", value: marketingNumber),
+                URLQueryItem(
+                    name: "_fields",
+                    value: "flight_iata,flight_icao,cs_flight_iata," +
+                        "cs_flight_icao,airline_iata,dep_iata,dep_icao," +
+                        "arr_iata,arr_icao,dep_time,arr_time,days," +
+                        "aircraft_icao,model,duration"
+                ),
+            ]
+        )
+        let weekday = Self.weekdayCode(for: selectedDate)
+        var records: [AirLabsFlightRecord] = []
+        for row in rows {
+            guard Self.rawRouteMatches(row, requested: marketingNumber),
+                  Self.routeDays(row["days"]).contains(weekday),
+                  let departureIATA = Self.string(row["dep_iata"]),
+                  let arrivalIATA = Self.string(row["arr_iata"]),
+                  let departureTime = Self.string(row["dep_time"]),
+                  let arrivalTime = Self.string(row["arr_time"]),
+                  let origin = try? await resolveAirport(
+                      iata: departureIATA,
+                      icao: Self.string(row["dep_icao"])
+                  ),
+                  let destination = try? await resolveAirport(
+                      iata: arrivalIATA,
+                      icao: Self.string(row["arr_icao"])
+                  ),
+                  let departure = Self.localDate(
+                      selectedDate,
+                      clock: departureTime,
+                      timeZoneIdentifier: origin.timeZoneIdentifier
+                  ),
+                  var arrival = Self.localDate(
+                      selectedDate,
+                      clock: arrivalTime,
+                      timeZoneIdentifier: destination.timeZoneIdentifier
+                  )
+            else { continue }
+
+            while arrival <= departure {
+                arrival = arrival.addingTimeInterval(24 * 3600)
+            }
+            records.append(AirLabsFlightRecord(
+                routeObject: row,
+                departureScheduled: departure,
+                arrivalScheduled: arrival
+            ))
+        }
+        return records.sorted {
+            (Self.preferredDeparture($0) ?? .distantFuture) <
+                (Self.preferredDeparture($1) ?? .distantFuture)
+        }
+    }
+
+    private static func rawRouteMatches(
+        _ row: [String: Any],
+        requested: String
+    ) -> Bool {
+        let normalized = normalizedFlightNumber(requested)
+        return [
+            string(row["flight_iata"]),
+            string(row["flight_icao"]),
+            string(row["cs_flight_iata"]),
+            string(row["cs_flight_icao"]),
+        ].compactMap { $0 }
+            .map(FlightNumberIdentity.canonical)
+            .contains(normalized)
+    }
+
+    private static func routeDays(_ value: Any?) -> Set<String> {
+        if let values = value as? [String] {
+            return Set(values.map { $0.lowercased() })
+        }
+        if let value = string(value) {
+            return Set(value.lowercased().split { $0 == "," || $0 == " " }
+                .map(String.init))
+        }
+        return []
+    }
+
+    private static func weekdayCode(for date: Date) -> String {
+        let codes = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"]
+        let weekday = Calendar.current.component(.weekday, from: date)
+        return codes[max(0, min(codes.count - 1, weekday - 1))]
+    }
+
+    private static func localDate(
+        _ selectedDate: Date,
+        clock: String,
+        timeZoneIdentifier: String?
+    ) -> Date? {
+        let pieces = clock.split(separator: ":")
+        guard pieces.count >= 2,
+              let hour = Int(pieces[0]),
+              let minute = Int(pieces[1])
+        else { return nil }
+        let requested = Calendar.current.dateComponents(
+            [.year, .month, .day],
+            from: selectedDate
+        )
+        var calendar = Calendar(identifier: .gregorian)
+        if let timeZoneIdentifier,
+           let timeZone = TimeZone(identifier: timeZoneIdentifier) {
+            calendar.timeZone = timeZone
+        }
+        var components = DateComponents()
+        components.calendar = calendar
+        components.timeZone = calendar.timeZone
+        components.year = requested.year
+        components.month = requested.month
+        components.day = requested.day
+        components.hour = hour
+        components.minute = minute
+        return calendar.date(from: components)
     }
 
     private static func matchesRequestedFlight(
@@ -1398,6 +1585,49 @@ private struct AirLabsFlightRecord: @unchecked Sendable {
         arrivalGate = AirLabsOpenSkyFlightStatusProvider.string(
             object["arr_gate"]
         )
+    }
+
+    init(
+        routeObject object: [String: Any],
+        departureScheduled: Date,
+        arrivalScheduled: Date
+    ) {
+        hex = nil
+        registration = nil
+        flightIATA = AirLabsOpenSkyFlightStatusProvider.string(object["flight_iata"])
+        flightICAO = AirLabsOpenSkyFlightStatusProvider.string(object["flight_icao"])
+        codeshareFlightIATA = AirLabsOpenSkyFlightStatusProvider.string(
+            object["cs_flight_iata"]
+        )
+        codeshareFlightICAO = AirLabsOpenSkyFlightStatusProvider.string(
+            object["cs_flight_icao"]
+        )
+        airlineIATA = AirLabsOpenSkyFlightStatusProvider.string(object["airline_iata"])
+        departureIATA = AirLabsOpenSkyFlightStatusProvider.string(object["dep_iata"])
+        departureICAO = AirLabsOpenSkyFlightStatusProvider.string(object["dep_icao"])
+        arrivalIATA = AirLabsOpenSkyFlightStatusProvider.string(object["arr_iata"])
+        arrivalICAO = AirLabsOpenSkyFlightStatusProvider.string(object["arr_icao"])
+        aircraftICAO = AirLabsOpenSkyFlightStatusProvider.string(object["aircraft_icao"])
+        model = AirLabsOpenSkyFlightStatusProvider.string(object["model"])
+        status = "scheduled"
+        latitude = nil
+        longitude = nil
+        altitudeMeters = nil
+        headingDegrees = nil
+        groundSpeedKPH = nil
+        verticalRateMPS = nil
+        updated = nil
+        self.departureScheduled = departureScheduled
+        departureEstimated = nil
+        departureActual = nil
+        self.arrivalScheduled = arrivalScheduled
+        arrivalEstimated = nil
+        arrivalActual = nil
+        durationMinutes = Self.integer(object["duration"])
+        departureTerminal = nil
+        departureGate = nil
+        arrivalTerminal = nil
+        arrivalGate = nil
     }
 
     private static func integer(_ value: Any?) -> Int? {
