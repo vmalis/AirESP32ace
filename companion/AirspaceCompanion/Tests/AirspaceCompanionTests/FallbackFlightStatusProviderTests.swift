@@ -95,6 +95,79 @@ final class FallbackFlightStatusProviderTests: XCTestCase {
         XCTAssertEqual(result.destination.code, "SFO")
     }
 
+    func testAirLabsConfirmsSelectedFlightLandedWhenFlightAwareIsStale() async throws {
+        let departure = Date(timeIntervalSince1970: 10_000)
+        let arrival = departure.addingTimeInterval(11 * 3600)
+        let now = arrival.addingTimeInterval(20 * 60)
+        let selection = FlightLegSelection(
+            providerIdentifier: "APZ111-1",
+            originCode: "ICN",
+            destinationCode: "SFO",
+            scheduledDeparture: departure
+        )
+        let provider = FallbackFlightStatusProvider(
+            primary: SelectedStaleFlightAwareProvider(
+                departure: departure,
+                arrival: arrival
+            ),
+            fallback: SelectedAirLabsLandedProvider(
+                departure: departure,
+                arrival: arrival.addingTimeInterval(7 * 60)
+            ),
+            now: { now }
+        )
+
+        let result = try await provider.trackedFlight(
+            for: "YP111",
+            on: departure,
+            matching: selection
+        )
+
+        XCTAssertEqual(result.journeyPhase(at: now), "arrived")
+        XCTAssertEqual(result.routeProgress, 1)
+        XCTAssertEqual(result.groundSpeedKPH, 0)
+        XCTAssertEqual(result.altitudeMeters, 0)
+        XCTAssertEqual(
+            result.actualArrival?.timeIntervalSince1970,
+            arrival.addingTimeInterval(7 * 60).timeIntervalSince1970
+        )
+        XCTAssertEqual(
+            result.dataSourceSummary,
+            "FlightAware AeroAPI + AirLabs"
+        )
+        XCTAssertEqual(result.origin.code, "ICN")
+        XCTAssertEqual(result.destination.code, "SFO")
+    }
+
+    func testAirLabsTerminalValidationWaitsUntilAfterETA() async throws {
+        let departure = Date(timeIntervalSince1970: 10_000)
+        let arrival = departure.addingTimeInterval(11 * 3600)
+        let now = arrival.addingTimeInterval(-10 * 60)
+        let selection = FlightLegSelection(
+            providerIdentifier: "APZ111-1",
+            originCode: "ICN",
+            destinationCode: "SFO",
+            scheduledDeparture: departure
+        )
+        let provider = FallbackFlightStatusProvider(
+            primary: SelectedStaleFlightAwareProvider(
+                departure: departure,
+                arrival: arrival
+            ),
+            fallback: UnexpectedFallbackFlightProvider(),
+            now: { now }
+        )
+
+        let result = try await provider.trackedFlight(
+            for: "YP111",
+            on: departure,
+            matching: selection
+        )
+
+        XCTAssertEqual(result.journeyPhase(at: now), "enroute")
+        XCTAssertEqual(result.dataSourceSummary, "FlightAware AeroAPI")
+    }
+
     func testAirLabsMetadataIsMergedWithOpenSkyState() async throws {
         let now = Date()
         let departure = now.addingTimeInterval(-3 * 3600)
@@ -715,6 +788,95 @@ private struct SelectedAirLabsGateProvider: FlightLegProviding {
             originGate: "32",
             destinationTerminal: "I",
             destinationGate: "A6"
+        )
+    }
+}
+
+private struct SelectedStaleFlightAwareProvider: FlightLegProviding {
+    let departure: Date
+    let arrival: Date
+
+    func flightLegs(
+        for marketingNumber: String,
+        on date: Date
+    ) async throws -> [FlightLegCandidate] { [] }
+
+    func trackedFlight(
+        for marketingNumber: String,
+        on date: Date?,
+        matching selection: FlightLegSelection?
+    ) async throws -> TrackedFlight {
+        TrackedFlight(
+            airlineName: "Air Premia",
+            marketingNumber: marketingNumber,
+            operationalCallsign: "APZ111",
+            aircraftType: "Boeing 787-9",
+            aircraftTypeCode: "B789",
+            origin: .icn,
+            destination: .sfo,
+            scheduleSummary: "ICN → SFO",
+            durationSummary: "11h",
+            distanceSummary: "1,820 km",
+            liveStatusSummary: "En route",
+            dataSourceSummary: "FlightAware AeroAPI",
+            routeProgress: 0.80,
+            lastPosition: .init(latitude: 45, longitude: -150),
+            lastUpdated: arrival.addingTimeInterval(-20 * 60),
+            altitudeMeters: 10_500,
+            groundSpeedKPH: 880,
+            headingDegrees: 85,
+            verticalPhase: "cruising",
+            scheduledDeparture: departure,
+            estimatedDeparture: departure,
+            actualDeparture: departure.addingTimeInterval(12 * 60),
+            estimatedArrival: arrival,
+            routeDistanceKilometers: 9_100,
+            originTerminal: "1",
+            originGate: "32",
+            destinationTerminal: "I",
+            destinationGate: "A6"
+        )
+    }
+}
+
+private struct SelectedAirLabsLandedProvider: FlightLegProviding {
+    let departure: Date
+    let arrival: Date
+
+    func flightLegs(
+        for marketingNumber: String,
+        on date: Date
+    ) async throws -> [FlightLegCandidate] { [] }
+
+    func trackedFlight(
+        for marketingNumber: String,
+        on date: Date?,
+        matching selection: FlightLegSelection?
+    ) async throws -> TrackedFlight {
+        TrackedFlight(
+            airlineName: "Air Premia",
+            marketingNumber: marketingNumber,
+            operationalCallsign: "APZ111",
+            aircraftType: "Boeing 787-9",
+            aircraftTypeCode: "B789",
+            origin: .icn,
+            destination: .sfo,
+            scheduleSummary: "ICN → SFO",
+            durationSummary: "11h",
+            distanceSummary: "0 km",
+            liveStatusSummary: "Landed",
+            dataSourceSummary: "AirLabs fallback",
+            routeProgress: 1,
+            lastPosition: Airport.sfo.coordinate,
+            lastUpdated: arrival,
+            altitudeMeters: 0,
+            groundSpeedKPH: 0,
+            verticalPhase: "landed",
+            scheduledDeparture: departure,
+            actualDeparture: departure.addingTimeInterval(12 * 60),
+            estimatedArrival: arrival,
+            actualArrival: arrival,
+            routeDistanceKilometers: 9_100
         )
     }
 }

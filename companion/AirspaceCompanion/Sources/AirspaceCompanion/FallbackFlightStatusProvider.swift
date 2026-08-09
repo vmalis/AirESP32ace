@@ -49,14 +49,14 @@ struct FallbackFlightStatusProvider: FlightLegProviding {
                 selection: selection
             )
             /* FlightAware owns the selected occurrence, route and schedule.
-             * Its free-tier response can omit terminal/gate fields even when
-             * the consumer website shows them. For an explicitly selected
-             * occurrence only, let AirLabs fill missing terminal/gate fields
-             * after confirming the same route and departure window. It may
-             * never replace the selected leg. This does not add another
-             * FlightAware request. */
+             * Its free-tier response can omit terminal/gate fields or retain
+             * an airborne state after touchdown. For an explicitly selected
+             * occurrence only, let AirLabs fill missing terminal fields and,
+             * once the ETA has passed, confirm a terminal state. AirLabs may
+             * never replace the selected route or occurrence. */
             if let selection,
-               Self.hasMissingGateMetadata(resolved),
+               Self.hasMissingGateMetadata(resolved) ||
+                    Self.shouldValidateTerminalState(resolved, at: now()),
                let fallback,
                let supplemental = try? await trackedFlight(
                     using: fallback,
@@ -69,18 +69,32 @@ struct FallbackFlightStatusProvider: FlightLegProviding {
                     supplemental,
                     selection: selection
                ) {
-                resolved = Self.mergingMissingGateMetadata(
-                    primary: resolved,
-                    supplemental: supplemental
-                )
+                if Self.hasMissingGateMetadata(resolved) {
+                    resolved = Self.mergingMissingGateMetadata(
+                        primary: resolved,
+                        supplemental: supplemental
+                    )
+                }
+                if Self.shouldValidateTerminalState(resolved, at: now()),
+                   Self.isSameSelectedTerminalOccurrence(
+                        supplemental,
+                        selection: selection
+                   ),
+                   Self.hasExplicitTerminalState(supplemental) {
+                    resolved = Self.mergingTerminalConfirmation(
+                        primary: resolved,
+                        supplemental: supplemental,
+                        at: now()
+                    )
+                }
             }
 
             /* Once that exact flight is airborne, OpenSky owns only the live
              * motion fields. */
-            if resolved.journeyPhase == "arrived" {
+            if resolved.journeyPhase(at: now()) == "arrived" {
                 return resolved.normalizedForTerminalState(at: now())
             }
-            if Self.shouldUseLiveTelemetry(resolved),
+            if Self.shouldUseLiveTelemetry(resolved, at: now()),
                let telemetryProvider,
                let telemetry = try? await telemetryProvider.telemetry(
                     for: resolved
@@ -175,8 +189,11 @@ struct FallbackFlightStatusProvider: FlightLegProviding {
         )
     }
 
-    private static func shouldUseLiveTelemetry(_ flight: TrackedFlight) -> Bool {
-        flight.journeyPhase == "enroute"
+    private static func shouldUseLiveTelemetry(
+        _ flight: TrackedFlight,
+        at now: Date
+    ) -> Bool {
+        flight.journeyPhase(at: now) == "enroute"
     }
 
     private static func isFresh(
@@ -200,6 +217,36 @@ struct FallbackFlightStatusProvider: FlightLegProviding {
         }
     }
 
+    private static func shouldValidateTerminalState(
+        _ flight: TrackedFlight,
+        at now: Date
+    ) -> Bool {
+        guard flight.actualArrival == nil,
+              let expectedArrival = flight.estimatedArrival,
+              now >= expectedArrival.addingTimeInterval(15 * 60)
+        else { return false }
+
+        let status = flight.liveStatusSummary.lowercased()
+        guard !status.contains("arrived"),
+              !status.contains("landed"),
+              !status.contains("cancelled"),
+              !status.contains("canceled")
+        else { return false }
+        return flight.actualDeparture != nil ||
+            status.contains("en route") ||
+            status.contains("enroute") ||
+            status.contains("airborne")
+    }
+
+    private static func hasExplicitTerminalState(
+        _ flight: TrackedFlight
+    ) -> Bool {
+        let status = flight.liveStatusSummary.lowercased()
+        return flight.actualArrival != nil ||
+            status.contains("arrived") ||
+            status.contains("landed")
+    }
+
     private static func isSameSelectedLeg(
         _ primary: TrackedFlight,
         _ supplemental: TrackedFlight,
@@ -218,7 +265,20 @@ struct FallbackFlightStatusProvider: FlightLegProviding {
         }
         return abs(departure.timeIntervalSince(
             selection.scheduledDeparture
-        )) <= 6 * 3600
+        )) < 2 * 3600
+    }
+
+    private static func isSameSelectedTerminalOccurrence(
+        _ supplemental: TrackedFlight,
+        selection: FlightLegSelection
+    ) -> Bool {
+        guard let departure = supplemental.scheduledDeparture ??
+                supplemental.estimatedDeparture ??
+                supplemental.actualDeparture
+        else { return false }
+        return abs(departure.timeIntervalSince(
+            selection.scheduledDeparture
+        )) < 2 * 3600
     }
 
     private static func mergingMissingGateMetadata(
@@ -264,6 +324,61 @@ struct FallbackFlightStatusProvider: FlightLegProviding {
                 supplemental.destinationTerminal,
             destinationGate: primary.destinationGate ??
                 supplemental.destinationGate
+        )
+    }
+
+    private static func mergingTerminalConfirmation(
+        primary: TrackedFlight,
+        supplemental: TrackedFlight,
+        at now: Date
+    ) -> TrackedFlight {
+        let arrival = supplemental.actualArrival ??
+            supplemental.estimatedArrival ??
+            primary.estimatedArrival ?? now
+        let status = supplemental.liveStatusSummary
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let confirmed = TrackedFlight(
+            airlineName: primary.airlineName,
+            marketingNumber: primary.marketingNumber,
+            operationalCallsign: primary.operationalCallsign,
+            aircraftType: primary.aircraftType,
+            aircraftTypeCode: primary.aircraftTypeCode,
+            origin: primary.origin,
+            destination: primary.destination,
+            scheduleSummary: primary.scheduleSummary,
+            durationSummary: primary.durationSummary,
+            distanceSummary: primary.distanceSummary,
+            liveStatusSummary: status.isEmpty ? "Arrived" : status,
+            dataSourceSummary: sourceSummary(
+                primary.dataSourceSummary,
+                adding: "AirLabs"
+            ),
+            routeProgress: primary.routeProgress,
+            lastPosition: primary.lastPosition,
+            lastUpdated: newest(primary.lastUpdated, supplemental.lastUpdated),
+            altitudeMeters: primary.altitudeMeters,
+            groundSpeedKPH: primary.groundSpeedKPH,
+            headingDegrees: primary.headingDegrees,
+            verticalPhase: primary.verticalPhase,
+            etaSummary: primary.etaSummary,
+            elapsedSummary: primary.elapsedSummary,
+            remainingSummary: primary.remainingSummary,
+            scheduledDeparture: primary.scheduledDeparture,
+            estimatedDeparture: primary.estimatedDeparture,
+            actualDeparture: primary.actualDeparture ??
+                supplemental.actualDeparture,
+            estimatedArrival: primary.estimatedArrival ??
+                supplemental.estimatedArrival,
+            actualArrival: supplemental.actualArrival ?? arrival,
+            routeDistanceKilometers: primary.routeDistanceKilometers,
+            originTerminal: primary.originTerminal,
+            originGate: primary.originGate,
+            destinationTerminal: primary.destinationTerminal,
+            destinationGate: primary.destinationGate
+        )
+        return confirmed.normalizedForTerminalState(
+            status: status.isEmpty ? "Arrived" : status,
+            at: arrival
         )
     }
 

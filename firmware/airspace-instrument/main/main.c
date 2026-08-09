@@ -6894,11 +6894,11 @@ typedef struct {
 } tracked_time_pair_t;
 
 #define TRACKED_POST_ARRIVAL_RETENTION_SECONDS (2 * 60 * 60)
+#define TRACKED_ENDPOINT_ARRIVAL_GRACE_SECONDS (30 * 60)
 
 /* Free-tier schedule records occasionally retain an airborne status after the
- * final live occurrence has disappeared.  Keep this inference deliberately
- * conservative: the selected occurrence must have started, reached the route
- * endpoint, and be at least 30 minutes beyond its ETA. */
+ * final live occurrence has disappeared. Keep the device-side inference
+ * conservative; provider-backed terminal validation is handled upstream. */
 static bool tracked_is_terminal(
     const app_remote_status_t *remote,
     int64_t now)
@@ -6930,10 +6930,13 @@ static bool tracked_is_terminal(
         strcasecmp(
             remote->tracked_flight_journey_phase,
             "airborne") == 0;
-    return occurrence_started &&
-        remote->route_progress >= 0.995f &&
-        remote->tracked_flight_estimated_arrival_unix > 0 &&
-        now >= remote->tracked_flight_estimated_arrival_unix + 30 * 60;
+    const int64_t eta =
+        remote->tracked_flight_estimated_arrival_unix;
+    if (!occurrence_started || eta <= 0) {
+        return false;
+    }
+    return remote->route_progress >= 0.995f &&
+        now >= eta + TRACKED_ENDPOINT_ARRIVAL_GRACE_SECONDS;
 }
 
 static int64_t tracked_terminal_reference_time(

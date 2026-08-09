@@ -1,4 +1,4 @@
 --flash_mode dio --flash_freq 80m --flash_size 32MB
 0x0000 bootloader.bin
 0x8000 partition-table.bin
-0x10000 AirESP32ace_080826_v01.bin
+0x10000 AirESP32ace_090826_v01.bin

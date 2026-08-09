@@ -149,6 +149,7 @@ struct TrackedFlight: Identifiable, Hashable, Codable {
 
 extension TrackedFlight {
     static let postArrivalRetentionInterval: TimeInterval = 2 * 3600
+    static let endpointArrivalGraceInterval: TimeInterval = 30 * 60
 
     /// The tracker remains available briefly after touchdown so the landed
     /// state can still be reviewed. Prefer the provider's actual arrival and
@@ -171,16 +172,14 @@ extension TrackedFlight {
     /// when the selected occurrence has started, its route has reached the
     /// destination, and its best ETA has been behind us for a conservative
     /// grace period.  This deliberately does not trust the status string or
-    /// schedule clock alone, which protects delayed and future flights.
+    /// schedule clock alone, which protects delayed flights. Provider-backed
+    /// terminal validation handles flights whose final position was missed.
     func hasInferredTerminalState(
         at now: Date,
-        gracePeriod: TimeInterval = 30 * 60
+        gracePeriod: TimeInterval = Self.endpointArrivalGraceInterval
     ) -> Bool {
         guard actualArrival == nil,
-              let progress = routeProgress,
-              progress >= 0.995,
-              let expectedArrival = estimatedArrival,
-              now.timeIntervalSince(expectedArrival) >= gracePeriod
+              let expectedArrival = estimatedArrival
         else { return false }
 
         let normalizedStatus = liveStatusSummary.lowercased()
@@ -188,10 +187,14 @@ extension TrackedFlight {
               !normalizedStatus.contains("canceled")
         else { return false }
 
-        return actualDeparture != nil ||
+        let occurrenceStarted = actualDeparture != nil ||
             normalizedStatus.contains("en route") ||
             normalizedStatus.contains("enroute") ||
             normalizedStatus.contains("airborne")
+        guard occurrenceStarted else { return false }
+
+        return (routeProgress ?? 0) >= 0.995 &&
+            now.timeIntervalSince(expectedArrival) >= gracePeriod
     }
 
     /// Reconciles the inferred phase into concrete values before the flight is
