@@ -1,0 +1,82 @@
+{
+  "sheet": "core_airliners_01",
+  "scalePolicy": {
+    "sideDetail": "same visual scale within sheet, scaled primarily by aircraft length",
+    "topMap": "same visual scale within each style row, scaled by length and wingspan",
+    "note": "Family labels use representative variants so scale can be deterministic."
+  },
+  "aircraft": [
+    {
+      "label": "BOEING 737",
+      "representativeVariant": "Boeing 737-800",
+      "lengthM": 39.5,
+      "wingspanM": 35.8,
+      "engines": 2,
+      "source": "https://www.boeing.com/commercial/737ng"
+    },
+    {
+      "label": "AIRBUS A320",
+      "representativeVariant": "Airbus A320",
+      "lengthM": 37.57,
+      "wingspanM": 35.8,
+      "engines": 2,
+      "source": "https://www.aircraft.airbus.com/en/aircraft/a320-family/a320ceo"
+    },
+    {
+      "label": "BOEING 787",
+      "representativeVariant": "Boeing 787-9",
+      "lengthM": 62.8,
+      "wingspanM": 60.1,
+      "engines": 2,
+      "source": "https://www.boeing.com/commercial/787"
+    },
+    {
+      "label": "AIRBUS A350",
+      "representativeVariant": "Airbus A350-900",
+      "lengthM": 66.8,
+      "wingspanM": 64.75,
+      "engines": 2,
+      "source": "https://aircraft.airbus.com/en/aircraft/a350-clean-sheet-clean-start/a350-900"
+    },
+    {
+      "label": "BOEING 777",
+      "representativeVariant": "Boeing 777-300ER",
+      "lengthM": 73.9,
+      "wingspanM": 64.8,
+      "engines": 2,
+      "source": "https://www.boeing.com/commercial/777"
+    },
+    {
+      "label": "AIRBUS A330",
+      "representativeVariant": "Airbus A330-300",
+      "lengthM": 63.7,
+      "wingspanM": 60.3,
+      "engines": 2,
+      "source": "https://aircraft.airbus.com/en/aircraft/a330/a330-300"
+    },
+    {
+      "label": "ILYUSHIN IL-96",
+      "representativeVariant": "Ilyushin Il-96-300",
+      "lengthM": 55.35,
+      "wingspanM": 60.11,
+      "engines": 4,
+      "source": "https://www.gccports.com/aircraft-technical-data-details/ilyushin-il-96-300"
+    },
+    {
+      "label": "TUPOLEV TU-204",
+      "representativeVariant": "Tupolev Tu-204-100",
+      "lengthM": 46.14,
+      "wingspanM": 41.8,
+      "engines": 2,
+      "source": "https://www.aviastar.org/air/russia/tu-204.php"
+    }
+  ],
+  "outputs": {
+    "sideDetailDraft": "../production_sheets/side_detail/core_airliners_01_draft.png",
+    "topMap": "../production_sheets/top_map/core_airliners_01.png"
+  },
+  "qa": {
+    "sideDetailDraft": "Draft only; IL-96 engine count needs correction before cutting individual assets.",
+    "topMap": "Accepted as first-pass production sheet; scale and style differences look usable."
+  }
+}

@@ -1,0 +1,62 @@
+# AirESP32ace
+# Created by VM, August 2026
+
+menu "AirESP32ace"
+
+    config AIRSPACE_WIFI_SSID
+        string "Wi-Fi SSID"
+        default ""
+        help
+            Local Wi-Fi network name. Leave blank to keep Wi-Fi disconnected.
+
+    config AIRSPACE_WIFI_PASSWORD
+        string "Wi-Fi password"
+        default ""
+        help
+            Local Wi-Fi password. Stored only in sdkconfig, which is gitignored in this project.
+
+    config AIRSPACE_LOCATION_LABEL
+        string "Location label"
+        default "San Francisco"
+        help
+            Human-readable location shown on the diagnostics screen and used by future weather/radar screens.
+
+    config AIRSPACE_LOCATION_LAT
+        string "Location latitude"
+        default "37.7749"
+
+    config AIRSPACE_LOCATION_LON
+        string "Location longitude"
+        default "-122.4194"
+
+    config AIRSPACE_TZ_POSIX
+        string "POSIX timezone"
+        default "PST8PDT,M3.2.0,M11.1.0"
+        help
+            POSIX TZ string used by localtime(). Default is Pacific time.
+
+    config AIRSPACE_METAR_STATION
+        string "Nearest METAR station"
+        default "KSJC"
+        help
+            ICAO station used for aviation weather near the instrument.
+
+    config AIRSPACE_RADAR_HALF_DEGREES
+        string "Local radar bounding half-size in degrees"
+        default "0.65"
+        help
+            OpenSky local aircraft query bounding box half-size around the configured location.
+
+    config AIRSPACE_OPENSKY_ENABLE
+        bool "Fetch nearby aircraft from OpenSky"
+        default y
+        help
+            Uses OpenSky's public states endpoint as a best-effort source for nearby aircraft.
+
+    config AIRSPACE_HTTP_USER_AGENT
+        string "HTTP User-Agent"
+        default "AirspaceInstrument/0.1 (personal ESP32 desk display)"
+        help
+            Public weather services ask clients to identify themselves.
+
+endmenu

@@ -1,0 +1,82 @@
+{
+  "sheet": "core_airliners_02",
+  "scalePolicy": {
+    "sideDetail": "same visual scale within sheet, scaled primarily by aircraft length",
+    "topMap": "same visual scale within each style row, scaled by length and wingspan",
+    "note": "Family labels use representative variants so scale can be deterministic."
+  },
+  "aircraft": [
+    {
+      "label": "BOEING 747",
+      "representativeVariant": "Boeing 747-400",
+      "lengthM": 70.7,
+      "wingspanM": 64.4,
+      "engines": 4,
+      "source": "https://www.boeing.com/commercial/747"
+    },
+    {
+      "label": "AIRBUS A380",
+      "representativeVariant": "Airbus A380-800",
+      "lengthM": 72.72,
+      "wingspanM": 79.75,
+      "engines": 4,
+      "source": "https://aircraft.airbus.com/en/aircraft/a380"
+    },
+    {
+      "label": "BOEING 767",
+      "representativeVariant": "Boeing 767-300ER",
+      "lengthM": 54.9,
+      "wingspanM": 47.6,
+      "engines": 2,
+      "source": "https://www.boeing.com/commercial/767"
+    },
+    {
+      "label": "AIRBUS A340",
+      "representativeVariant": "Airbus A340-300",
+      "lengthM": 63.69,
+      "wingspanM": 60.3,
+      "engines": 4,
+      "source": "https://aircraft.airbus.com/en/aircraft/previous-generation-aircraft/a340-family"
+    },
+    {
+      "label": "BOEING 757",
+      "representativeVariant": "Boeing 757-200",
+      "lengthM": 47.3,
+      "wingspanM": 38.0,
+      "engines": 2,
+      "source": "https://www.boeing.com/commercial/757"
+    },
+    {
+      "label": "AIRBUS A321",
+      "representativeVariant": "Airbus A321neo",
+      "lengthM": 44.51,
+      "wingspanM": 35.8,
+      "engines": 2,
+      "source": "https://aircraft.airbus.com/en/aircraft/a320-family/a321neo"
+    },
+    {
+      "label": "EMBRAER E-JET",
+      "representativeVariant": "Embraer E190",
+      "lengthM": 36.24,
+      "wingspanM": 28.72,
+      "engines": 2,
+      "source": "https://embraercommercialaviation.com/commercial-jets/e190/"
+    },
+    {
+      "label": "BOMBARDIER CRJ",
+      "representativeVariant": "Bombardier CRJ900",
+      "lengthM": 36.2,
+      "wingspanM": 24.85,
+      "engines": 2,
+      "source": "https://www.mhi.com/group/mhirds/products/crj-series"
+    }
+  ],
+  "outputs": {
+    "sideDetailDraft": "../production_sheets/side_detail/core_airliners_02_draft.png",
+    "topMap": "../production_sheets/top_map/core_airliners_02.png"
+  },
+  "qa": {
+    "sideDetailDraft": "Draft only; needs per-aircraft factual QA before cutting individual assets.",
+    "topMap": "Accepted as first-pass production sheet; scale and style differences look usable."
+  }
+}

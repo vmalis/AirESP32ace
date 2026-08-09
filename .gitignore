@@ -1,0 +1,37 @@
+.DS_Store
+*.pyc
+__pycache__/
+
+# Local configuration and credentials
+firmware/**/sdkconfig
+firmware/**/sdkconfig.old
+*.env
+.env*
+!*.env.example
+
+# ESP-IDF outputs and fetched components
+firmware/**/build/
+firmware/**/managed_components/
+firmware/**/dependencies.lock
+
+# Swift/Xcode outputs
+companion/**/.build/
+shared/**/build/
+.swift-module-cache/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+
+# Runtime-generated/downloaded content
+output/
+tmp/
+backups/
+assets/airline_logos/
+assets/cargo_logos/
+**/MapCache/
+**/AirlineLogos/
+
+# Local toolchains and upstream source trees
+tools/esp-idf/
+waveshare-official/
+upstream/

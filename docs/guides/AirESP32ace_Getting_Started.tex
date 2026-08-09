@@ -1,0 +1,259 @@
+% AirESP32ace
+% Created by VM, August 2026
+
+% Build with XeLaTeX on macOS. Avenir Next is supplied by macOS and is not
+% redistributed with the project.
+\documentclass[10pt,letterpaper]{article}
+
+\usepackage[margin=0.62in]{geometry}
+\usepackage{fontspec}
+\usepackage{graphicx}
+\usepackage[table]{xcolor}
+\usepackage{tikz}
+\usepackage{tabularx}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{listings}
+\usepackage{microtype}
+\usepackage{hyperref}
+\usepackage{ragged2e}
+
+\setmainfont{Avenir Next}
+\setsansfont{Avenir Next}
+\setmonofont{Menlo}
+\renewcommand{\familydefault}{\sfdefault}
+
+\definecolor{Canvas}{HTML}{080A0C}
+\definecolor{Panel}{HTML}{111519}
+\definecolor{PanelTwo}{HTML}{171C20}
+\definecolor{Text}{HTML}{F4F7F5}
+\definecolor{Muted}{HTML}{98A19C}
+\definecolor{Line}{HTML}{29312D}
+\definecolor{Accent}{HTML}{20D45B}
+\definecolor{AccentDark}{HTML}{0D6D35}
+\definecolor{CodeBG}{HTML}{0C100E}
+
+\pagecolor{Canvas}
+\color{Text}
+\hypersetup{
+  colorlinks=true,
+  urlcolor=Accent,
+  linkcolor=Accent,
+  pdftitle={AirESP32ace - Getting Started},
+  pdfauthor={AirESP32ace}
+}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+\pagestyle{empty}
+\emergencystretch=2em
+
+\lstdefinestyle{terminal}{
+  basicstyle=\ttfamily\fontsize{8.2}{10.2}\selectfont\color{Text},
+  backgroundcolor=\color{CodeBG},
+  frame=single,
+  rulecolor=\color{Line},
+  framerule=0.5pt,
+  framesep=7pt,
+  xleftmargin=0pt,
+  xrightmargin=0pt,
+  aboveskip=5pt,
+  belowskip=5pt,
+  showstringspaces=false,
+  columns=fullflexible,
+  keepspaces=true
+}
+
+\newcommand{\Kicker}[1]{%
+  {\fontsize{7.6}{9}\selectfont\bfseries\color{Accent}\MakeUppercase{#1}\par}%
+}
+\newcommand{\SectionTitle}[1]{%
+  {\fontsize{14.5}{17}\selectfont\bfseries\color{Text}#1\par}%
+  \vspace{2pt}\textcolor{Line}{\rule{\linewidth}{0.55pt}}\vspace{4pt}%
+}
+\newcommand{\SmallTitle}[1]{%
+  {\fontsize{9.3}{11}\selectfont\bfseries\color{Text}#1\par}%
+}
+\newcommand{\Footer}[1]{%
+  \vfill
+  \textcolor{Line}{\rule{\linewidth}{0.5pt}}\vspace{4pt}
+  {\fontsize{7.2}{8.6}\selectfont\color{Muted}
+    AirESP32ace \hfill Getting Started \hfill #1 / 3\par}
+}
+\newcommand{\Service}[3]{%
+  \begin{minipage}[t]{0.31\linewidth}
+    \parbox[c][0.76in][c]{\linewidth}{%
+      \Kicker{#1}
+      {\fontsize{8.1}{10.1}\selectfont\color{Muted}#2\par}
+      \vspace{2pt}{\fontsize{7.1}{8.6}\selectfont\color{Accent}#3\par}%
+    }
+  \end{minipage}%
+}
+\newcommand{\Step}[3]{%
+  \begin{minipage}[t]{\linewidth}
+    \begin{tabularx}{\linewidth}{@{}p{0.36in}X@{}}
+      \raisebox{-0.12in}{\tikz\node[circle,fill=Accent,text=Canvas,
+        font=\bfseries\fontsize{9}{10}\selectfont,minimum size=0.27in,
+        inner sep=0pt]{#1};} &
+      {\fontsize{9.2}{11}\selectfont\bfseries\color{Text}#2}\par
+      {\fontsize{7.8}{9.7}\selectfont\color{Muted}#3}\tabularnewline
+    \end{tabularx}
+  \end{minipage}\vspace{4pt}%
+}
+\newcommand{\GuideShot}[4]{%
+  \begin{minipage}[t]{0.485\linewidth}
+    \centering
+    \includegraphics[width=#4]{#1}\par
+    \vspace{3pt}
+    \raggedright
+    {\fontsize{8.4}{10.2}\selectfont\bfseries\color{Text}#2\par}
+    {\fontsize{7.2}{8.8}\selectfont\color{Muted}#3\par}
+  \end{minipage}%
+}
+
+\begin{document}
+
+% ---------------------------------------------------------------------------
+% Page 1
+% ---------------------------------------------------------------------------
+\begin{minipage}[t]{0.74\linewidth}
+  \vspace{0pt}
+  \Kicker{Open source / quick start}
+  \vspace{5pt}
+  {\fontsize{29}{31}\selectfont\bfseries AirESP32ace\par}
+  \vspace{3pt}
+  {\fontsize{13}{16}\selectfont\color{Muted}From clone to the first live screen\par}
+  \vspace{7pt}
+  {\fontsize{8.6}{11}\selectfont\color{Text}
+    ESP32-S3 firmware and a native macOS companion for the Waveshare
+    1.75-inch circular AMOLED board. This guide covers the shortest reliable
+    path to a working device.\par}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.20\linewidth}
+  \vspace{-4pt}
+  \includegraphics[width=\linewidth]{assets/AirESP32ace_AppIcon_Transparent.png}
+\end{minipage}
+
+\vspace{7pt}
+\textcolor{Accent}{\rule{\linewidth}{1.4pt}}
+\vspace{9pt}
+
+\begin{minipage}[t]{0.47\linewidth}
+  \SectionTitle{What you need}
+  \begin{itemize}[leftmargin=0.18in,itemsep=2.5pt,topsep=1pt]
+    \item \textbf{Waveshare ESP32-S3-Touch-AMOLED-1.75C} with 32 MB flash and 8 MB PSRAM.
+    \item A \textbf{data-capable USB-C cable}; charging-only cables cannot flash the board.
+    \item A Mac on \textbf{macOS 15 or newer}, Git, and Xcode Command Line Tools.
+    \item 2.4 GHz Wi-Fi. An iPhone hotspot can be added as an optional second network.
+    \item Optional provider accounts for richer aircraft and tracked-flight data.
+  \end{itemize}
+  \vspace{3pt}
+  \SmallTitle{No Apple Developer account required}
+  {\fontsize{7.6}{9.5}\selectfont\color{Muted}
+    Development builds use local ad-hoc signing. API credentials stay on
+    your Mac or device and are never included in the repository.\par}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.47\linewidth}
+  \SectionTitle{What runs where}
+  \begin{tabularx}{\linewidth}{@{}p{0.76in}X@{}}
+    \textcolor{Accent}{\bfseries Device} &
+      ESP-IDF 5.5+, LVGL 9.5, the Waveshare board component, live UI,
+      OpenSky radar, weather, ISS, and cached RGB565 artwork.\\[5pt]
+    \textcolor{Accent}{\bfseries Mac} &
+      Native SwiftUI companion, MapKit renderers, setup and firmware tools,
+      tracked-flight scheduling, API validation, and the exact LVGL digital twin.\\[5pt]
+    \textcolor{Accent}{\bfseries Sync} &
+      Selected cities, settings, flight plans, maps, and generated caches are
+      sent to one paired device. No cloud account is required.\\
+  \end{tabularx}
+  \vspace{4pt}
+  {\fontsize{7.4}{9.3}\selectfont\color{Muted}
+    The firmware deliberately separates fast animation from slower network
+    updates and uses PSRAM, cached assets, and partial redraws to keep the
+    466 by 466 AMOLED responsive.\par}
+\end{minipage}
+
+\vspace{10pt}
+\SectionTitle{Aircraft data at a glance}
+\noindent
+\Service{OpenSky}{Nearby aircraft state vectors and best-effort live telemetry.}{Anonymous works; credentials improve limits.}
+\hfill
+\Service{FlightAware}{Primary provider for a selected scheduled flight and its status.}{Optional AeroAPI key; Mac only.}
+\hfill
+\Service{AirLabs}{Fallback route, metadata, telemetry, and airline identity.}{Optional key; complements OpenSky.}
+
+\vspace{7pt}
+{\fontsize{7.4}{9.2}\selectfont\color{Muted}
+  Other public services: Open-Meteo for weather and air quality, RainViewer for
+  radar frames, Where the ISS at for live ISS state, and Launch Library 2 for
+  NASA, Roscosmos, and SpaceX launch schedules. Provider coverage, quotas, and
+  terms remain under each provider's control.\par}
+
+\Footer{1}
+
+\newpage
+
+% ---------------------------------------------------------------------------
+% Page 2 -- visual setup and first sync. The screen map is appended as page 3
+% by the build command so it retains its readable landscape page size.
+% ---------------------------------------------------------------------------
+\Kicker{First run / macOS companion}
+\vspace{3pt}
+{\fontsize{22}{25}\selectfont\bfseries From USB-C to the first live screen\par}
+{\fontsize{8.5}{10.5}\selectfont\color{Muted}
+  The companion handles first-time flashing, Wi-Fi and API configuration, map
+  generation, and later Sync operations. Use a data-capable USB-C cable.\par}
+\vspace{4pt}
+
+\begin{lstlisting}[style=terminal]
+git clone https://github.com/vmalis/AirESP32ace.git
+cd AirESP32ace/companion/AirspaceCompanion
+swift run AirESP32ace
+\end{lstlisting}
+
+\vspace{3pt}
+\GuideShot{../../output/guide/companion-screens/device-chooser.png}
+  {1. Open the device control}
+  {Choose \textbf{Set Up New Device}. Firmware updates later use the adjacent action without replacing settings.}
+  {2.15in}
+\hfill
+\GuideShot{../../output/guide/companion-screens/device-setupConnect.png}
+  {2. Connect the tracker}
+  {Wait for the actual serial target to appear. First setup and wired recovery require USB-C.}
+  {2.15in}
+
+\vspace{7pt}
+\GuideShot{../../output/guide/companion-screens/device-setupForm.png}
+  {3. Enter configuration}
+  {Home Wi-Fi is required for live data. Hotspot and provider credentials are optional.}
+  {2.15in}
+\hfill
+\GuideShot{../../output/guide/companion-screens/device-firmwareSuccess.png}
+  {4. Flash and let the board restart}
+  {Keep the cable attached through completion. The assistant preserves the submitted network, API, city, and display settings.}
+  {2.15in}
+
+\vspace{7pt}
+\begin{minipage}{\linewidth}
+  \Kicker{First sync}
+  {\fontsize{7.8}{9.6}\selectfont\color{Text}
+    Wait for \textbf{Reachable} below the digital twin, then choose radar
+    cities, clock order, units, Dock views, and up to four non-conflicting
+    tracked flights. Press \textbf{Sync}. The Mac generates maps and sends
+    configuration plus assets over USB-C when attached, otherwise over Wi-Fi.
+    Let the progress bar finish before disconnecting.\par}
+  \vspace{3pt}
+  {\fontsize{7.2}{8.8}\selectfont\color{Muted}
+    No serial target: change the cable or USB port. No live data: verify 2.4 GHz
+    Wi-Fi, location, API status, and local provider coverage.\par}%
+\end{minipage}
+
+\vspace{6pt}
+{\fontsize{7.3}{9.1}\selectfont
+  \href{https://github.com/vmalis/AirESP32ace}{Repository}\quad\textcolor{Line}{|}\quad
+  \href{https://github.com/vmalis/AirESP32ace/blob/main/docs/guides/AirESP32ace_Device_User_Guide.pdf}{Device guide}\quad\textcolor{Line}{|}\quad
+  \href{https://github.com/vmalis/AirESP32ace/blob/main/docs/guides/AirESP32ace_Companion_User_Guide.pdf}{Companion guide}\quad\textcolor{Line}{|}\quad
+  \href{https://docs.waveshare.com/ESP32-S3-Touch-AMOLED-1.75C}{Board documentation}\par}
+
+\Footer{2}
+
+\end{document}

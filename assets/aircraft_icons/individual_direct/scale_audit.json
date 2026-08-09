@@ -1,0 +1,7071 @@
+{
+  "summary": {
+    "mode": "audit",
+    "sideDetailPolicy": "Side detail assets use a compressed visual scale: smallest aircraft are about 80% of the largest, preserving detail-screen readability.",
+    "topMapPolicy": "Top-map assets use compressed physical scaling: display size = maxFill * canvas * (max(length,wingspan) / 88.4)^0.3.",
+    "checkedFiles": 784,
+    "checkedSlugs": 112,
+    "badCanvasCount": 0,
+    "badScaleCount": 0,
+    "badCanvas": [],
+    "badScale": []
+  },
+  "report": [
+    {
+      "slug": "airbus-a220",
+      "file": "side_detail.png",
+      "target": 314,
+      "actual": 314,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "airbus-a220",
+      "file": "top_map/xdr_radar.png",
+      "target": 275,
+      "actual": 275,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a220",
+      "file": "top_map/cartographic_glass.png",
+      "target": 275,
+      "actual": 275,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a220",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 275,
+      "actual": 275,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a220",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 34,
+      "actual": 34,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a220",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 34,
+      "actual": 34,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a220",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 34,
+      "actual": 34,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a300",
+      "file": "side_detail.png",
+      "target": 327,
+      "actual": 327,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "airbus-a300",
+      "file": "top_map/xdr_radar.png",
+      "target": 304,
+      "actual": 304,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a300",
+      "file": "top_map/cartographic_glass.png",
+      "target": 304,
+      "actual": 304,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a300",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 304,
+      "actual": 304,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a300",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 38,
+      "actual": 38,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a300",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 38,
+      "actual": 38,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a300",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 38,
+      "actual": 38,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a310",
+      "file": "side_detail.png",
+      "target": 321,
+      "actual": 321,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "airbus-a310",
+      "file": "top_map/xdr_radar.png",
+      "target": 291,
+      "actual": 291,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a310",
+      "file": "top_map/cartographic_glass.png",
+      "target": 291,
+      "actual": 291,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a310",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 291,
+      "actual": 291,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a310",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 36,
+      "actual": 36,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a310",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 36,
+      "actual": 36,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a310",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 36,
+      "actual": 36,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a319",
+      "file": "side_detail.png",
+      "target": 310,
+      "actual": 310,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "airbus-a319",
+      "file": "top_map/xdr_radar.png",
+      "target": 268,
+      "actual": 268,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a319",
+      "file": "top_map/cartographic_glass.png",
+      "target": 268,
+      "actual": 268,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a319",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 268,
+      "actual": 268,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a319",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 34,
+      "actual": 34,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a319",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 34,
+      "actual": 34,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a319",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 34,
+      "actual": 34,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a320",
+      "file": "side_detail.png",
+      "target": 313,
+      "actual": 313,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "airbus-a320",
+      "file": "top_map/xdr_radar.png",
+      "target": 272,
+      "actual": 271,
+      "delta": -1,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a320",
+      "file": "top_map/cartographic_glass.png",
+      "target": 272,
+      "actual": 272,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a320",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 272,
+      "actual": 272,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a320",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 34,
+      "actual": 34,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a320",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 34,
+      "actual": 34,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a320",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 34,
+      "actual": 34,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a321",
+      "file": "side_detail.png",
+      "target": 319,
+      "actual": 319,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "airbus-a321",
+      "file": "top_map/xdr_radar.png",
+      "target": 286,
+      "actual": 286,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a321",
+      "file": "top_map/cartographic_glass.png",
+      "target": 286,
+      "actual": 286,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a321",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 286,
+      "actual": 286,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a321",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 36,
+      "actual": 36,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a321",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 36,
+      "actual": 36,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a321",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 36,
+      "actual": 36,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a330",
+      "file": "side_detail.png",
+      "target": 335,
+      "actual": 335,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "airbus-a330",
+      "file": "top_map/xdr_radar.png",
+      "target": 319,
+      "actual": 319,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a330",
+      "file": "top_map/cartographic_glass.png",
+      "target": 319,
+      "actual": 319,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a330",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 319,
+      "actual": 319,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a330",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 40,
+      "actual": 40,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a330",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 40,
+      "actual": 40,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a330",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 40,
+      "actual": 40,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a340",
+      "file": "side_detail.png",
+      "target": 345,
+      "actual": 345,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "airbus-a340",
+      "file": "top_map/xdr_radar.png",
+      "target": 336,
+      "actual": 336,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a340",
+      "file": "top_map/cartographic_glass.png",
+      "target": 336,
+      "actual": 336,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a340",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 336,
+      "actual": 336,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a340",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 42,
+      "actual": 42,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a340",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 42,
+      "actual": 42,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a340",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 42,
+      "actual": 42,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a350",
+      "file": "side_detail.png",
+      "target": 338,
+      "actual": 338,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "airbus-a350",
+      "file": "top_map/xdr_radar.png",
+      "target": 324,
+      "actual": 324,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a350",
+      "file": "top_map/cartographic_glass.png",
+      "target": 324,
+      "actual": 324,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a350",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 324,
+      "actual": 324,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a350",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 40,
+      "actual": 40,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a350",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 40,
+      "actual": 40,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a350",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 40,
+      "actual": 40,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a380",
+      "file": "side_detail.png",
+      "target": 343,
+      "actual": 343,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "airbus-a380",
+      "file": "top_map/xdr_radar.png",
+      "target": 341,
+      "actual": 341,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a380",
+      "file": "top_map/cartographic_glass.png",
+      "target": 341,
+      "actual": 341,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a380",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 341,
+      "actual": 341,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a380",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 43,
+      "actual": 43,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a380",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 43,
+      "actual": 43,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-a380",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 43,
+      "actual": 43,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-h125",
+      "file": "side_detail.png",
+      "target": 292,
+      "actual": 292,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "airbus-h125",
+      "file": "top_map/xdr_radar.png",
+      "target": 198,
+      "actual": 198,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-h125",
+      "file": "top_map/cartographic_glass.png",
+      "target": 198,
+      "actual": 198,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-h125",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 198,
+      "actual": 198,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-h125",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 25,
+      "actual": 25,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-h125",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 25,
+      "actual": 25,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-h125",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 25,
+      "actual": 25,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-h130",
+      "file": "side_detail.png",
+      "target": 292,
+      "actual": 292,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "airbus-h130",
+      "file": "top_map/xdr_radar.png",
+      "target": 196,
+      "actual": 196,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-h130",
+      "file": "top_map/cartographic_glass.png",
+      "target": 196,
+      "actual": 196,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-h130",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 196,
+      "actual": 196,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-h130",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 25,
+      "actual": 25,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-h130",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 25,
+      "actual": 25,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-h130",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 25,
+      "actual": 25,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-h135",
+      "file": "side_detail.png",
+      "target": 292,
+      "actual": 292,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "airbus-h135",
+      "file": "top_map/xdr_radar.png",
+      "target": 194,
+      "actual": 194,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-h135",
+      "file": "top_map/cartographic_glass.png",
+      "target": 194,
+      "actual": 194,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-h135",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 194,
+      "actual": 194,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-h135",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 24,
+      "actual": 24,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-h135",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 24,
+      "actual": 24,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-h135",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 24,
+      "actual": 24,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-h145",
+      "file": "side_detail.png",
+      "target": 293,
+      "actual": 293,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "airbus-h145",
+      "file": "top_map/xdr_radar.png",
+      "target": 201,
+      "actual": 201,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-h145",
+      "file": "top_map/cartographic_glass.png",
+      "target": 201,
+      "actual": 200,
+      "delta": -1,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-h145",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 201,
+      "actual": 201,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-h145",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 25,
+      "actual": 25,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-h145",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 25,
+      "actual": 25,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-h145",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 25,
+      "actual": 25,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-h160",
+      "file": "side_detail.png",
+      "target": 293,
+      "actual": 293,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "airbus-h160",
+      "file": "top_map/xdr_radar.png",
+      "target": 203,
+      "actual": 203,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-h160",
+      "file": "top_map/cartographic_glass.png",
+      "target": 203,
+      "actual": 203,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-h160",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 203,
+      "actual": 203,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-h160",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 25,
+      "actual": 25,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-h160",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 25,
+      "actual": 25,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "airbus-h160",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 25,
+      "actual": 25,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "antonov-an-124",
+      "file": "side_detail.png",
+      "target": 340,
+      "actual": 340,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "antonov-an-124",
+      "file": "top_map/xdr_radar.png",
+      "target": 333,
+      "actual": 333,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "antonov-an-124",
+      "file": "top_map/cartographic_glass.png",
+      "target": 333,
+      "actual": 333,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "antonov-an-124",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 333,
+      "actual": 333,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "antonov-an-124",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 42,
+      "actual": 42,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "antonov-an-124",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 42,
+      "actual": 42,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "antonov-an-124",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 42,
+      "actual": 42,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "antonov-an-148",
+      "file": "side_detail.png",
+      "target": 306,
+      "actual": 306,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "antonov-an-148",
+      "file": "top_map/xdr_radar.png",
+      "target": 252,
+      "actual": 252,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "antonov-an-148",
+      "file": "top_map/cartographic_glass.png",
+      "target": 252,
+      "actual": 252,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "antonov-an-148",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 252,
+      "actual": 252,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "antonov-an-148",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 32,
+      "actual": 32,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "antonov-an-148",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 32,
+      "actual": 32,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "antonov-an-148",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 32,
+      "actual": 32,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "antonov-an-225",
+      "file": "side_detail.png",
+      "target": 352,
+      "actual": 352,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "antonov-an-225",
+      "file": "top_map/xdr_radar.png",
+      "target": 352,
+      "actual": 352,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "antonov-an-225",
+      "file": "top_map/cartographic_glass.png",
+      "target": 352,
+      "actual": 352,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "antonov-an-225",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 352,
+      "actual": 352,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "antonov-an-225",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 44,
+      "actual": 44,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "antonov-an-225",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 44,
+      "actual": 44,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "antonov-an-225",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 44,
+      "actual": 44,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "antonov-an-24",
+      "file": "side_detail.png",
+      "target": 301,
+      "actual": 301,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "antonov-an-24",
+      "file": "top_map/xdr_radar.png",
+      "target": 252,
+      "actual": 252,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "antonov-an-24",
+      "file": "top_map/cartographic_glass.png",
+      "target": 252,
+      "actual": 252,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "antonov-an-24",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 252,
+      "actual": 252,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "antonov-an-24",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 32,
+      "actual": 32,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "antonov-an-24",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 32,
+      "actual": 32,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "antonov-an-24",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 32,
+      "actual": 32,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "atr-42",
+      "file": "side_detail.png",
+      "target": 301,
+      "actual": 301,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "atr-42",
+      "file": "top_map/xdr_radar.png",
+      "target": 240,
+      "actual": 240,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "atr-42",
+      "file": "top_map/cartographic_glass.png",
+      "target": 240,
+      "actual": 240,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "atr-42",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 240,
+      "actual": 240,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "atr-42",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 30,
+      "actual": 30,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "atr-42",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 30,
+      "actual": 30,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "atr-42",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 30,
+      "actual": 30,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "atr-72",
+      "file": "side_detail.png",
+      "target": 304,
+      "actual": 304,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "atr-72",
+      "file": "top_map/xdr_radar.png",
+      "target": 247,
+      "actual": 247,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "atr-72",
+      "file": "top_map/cartographic_glass.png",
+      "target": 247,
+      "actual": 247,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "atr-72",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 247,
+      "actual": 247,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "atr-72",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 31,
+      "actual": 31,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "atr-72",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 31,
+      "actual": 31,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "atr-72",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 31,
+      "actual": 31,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "bae-146",
+      "file": "side_detail.png",
+      "target": 308,
+      "actual": 308,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "bae-146",
+      "file": "top_map/xdr_radar.png",
+      "target": 257,
+      "actual": 257,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "bae-146",
+      "file": "top_map/cartographic_glass.png",
+      "target": 257,
+      "actual": 257,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "bae-146",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 257,
+      "actual": 257,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "bae-146",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 32,
+      "actual": 32,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "bae-146",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 32,
+      "actual": 32,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "bae-146",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 32,
+      "actual": 32,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "beechcraft-1900",
+      "file": "side_detail.png",
+      "target": 296,
+      "actual": 296,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "beechcraft-1900",
+      "file": "top_map/xdr_radar.png",
+      "target": 217,
+      "actual": 217,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "beechcraft-1900",
+      "file": "top_map/cartographic_glass.png",
+      "target": 217,
+      "actual": 217,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "beechcraft-1900",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 217,
+      "actual": 217,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "beechcraft-1900",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 27,
+      "actual": 27,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "beechcraft-1900",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 27,
+      "actual": 27,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "beechcraft-1900",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 27,
+      "actual": 27,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "beechcraft-king-air",
+      "file": "side_detail.png",
+      "target": 293,
+      "actual": 293,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "beechcraft-king-air",
+      "file": "top_map/xdr_radar.png",
+      "target": 217,
+      "actual": 217,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "beechcraft-king-air",
+      "file": "top_map/cartographic_glass.png",
+      "target": 217,
+      "actual": 217,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "beechcraft-king-air",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 217,
+      "actual": 217,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "beechcraft-king-air",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 27,
+      "actual": 27,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "beechcraft-king-air",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 27,
+      "actual": 27,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "beechcraft-king-air",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 27,
+      "actual": 27,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "bell-206",
+      "file": "side_detail.png",
+      "target": 292,
+      "actual": 292,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "bell-206",
+      "file": "top_map/xdr_radar.png",
+      "target": 194,
+      "actual": 194,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "bell-206",
+      "file": "top_map/cartographic_glass.png",
+      "target": 194,
+      "actual": 193,
+      "delta": -1,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "bell-206",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 194,
+      "actual": 194,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "bell-206",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 24,
+      "actual": 24,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "bell-206",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 24,
+      "actual": 24,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "bell-206",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 24,
+      "actual": 24,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "bell-407",
+      "file": "side_detail.png",
+      "target": 292,
+      "actual": 292,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "bell-407",
+      "file": "top_map/xdr_radar.png",
+      "target": 196,
+      "actual": 196,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "bell-407",
+      "file": "top_map/cartographic_glass.png",
+      "target": 196,
+      "actual": 196,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "bell-407",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 196,
+      "actual": 196,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "bell-407",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 25,
+      "actual": 25,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "bell-407",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 25,
+      "actual": 25,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "bell-407",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 25,
+      "actual": 25,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "bell-429",
+      "file": "side_detail.png",
+      "target": 293,
+      "actual": 293,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "bell-429",
+      "file": "top_map/xdr_radar.png",
+      "target": 199,
+      "actual": 199,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "bell-429",
+      "file": "top_map/cartographic_glass.png",
+      "target": 199,
+      "actual": 199,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "bell-429",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 199,
+      "actual": 199,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "bell-429",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 25,
+      "actual": 25,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "bell-429",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 25,
+      "actual": 25,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "bell-429",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 25,
+      "actual": 25,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "boeing-707",
+      "file": "side_detail.png",
+      "target": 321,
+      "actual": 321,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "boeing-707",
+      "file": "top_map/xdr_radar.png",
+      "target": 290,
+      "actual": 290,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "boeing-707",
+      "file": "top_map/cartographic_glass.png",
+      "target": 290,
+      "actual": 290,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "boeing-707",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 290,
+      "actual": 290,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "boeing-707",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 36,
+      "actual": 36,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "boeing-707",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 36,
+      "actual": 36,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "boeing-707",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 36,
+      "actual": 36,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "boeing-717",
+      "file": "side_detail.png",
+      "target": 313,
+      "actual": 313,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "boeing-717",
+      "file": "top_map/xdr_radar.png",
+      "target": 273,
+      "actual": 273,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "boeing-717",
+      "file": "top_map/cartographic_glass.png",
+      "target": 273,
+      "actual": 273,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "boeing-717",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 273,
+      "actual": 273,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "boeing-717",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 34,
+      "actual": 34,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "boeing-717",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 34,
+      "actual": 34,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "boeing-717",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 34,
+      "actual": 34,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "boeing-727",
+      "file": "side_detail.png",
+      "target": 321,
+      "actual": 321,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "boeing-727",
+      "file": "top_map/xdr_radar.png",
+      "target": 291,
+      "actual": 291,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "boeing-727",
+      "file": "top_map/cartographic_glass.png",
+      "target": 291,
+      "actual": 291,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "boeing-727",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 291,
+      "actual": 291,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "boeing-727",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 36,
+      "actual": 36,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "boeing-727",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 36,
+      "actual": 36,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "boeing-727",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 36,
+      "actual": 36,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "boeing-737",
+      "file": "side_detail.png",
+      "target": 315,
+      "actual": 315,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "boeing-737",
+      "file": "top_map/xdr_radar.png",
+      "target": 276,
+      "actual": 276,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "boeing-737",
+      "file": "top_map/cartographic_glass.png",
+      "target": 276,
+      "actual": 276,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "boeing-737",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 276,
+      "actual": 276,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "boeing-737",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 35,
+      "actual": 35,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "boeing-737",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 35,
+      "actual": 35,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "boeing-737",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 35,
+      "actual": 35,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "boeing-747",
+      "file": "side_detail.png",
+      "target": 341,
+      "actual": 341,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "boeing-747",
+      "file": "top_map/xdr_radar.png",
+      "target": 329,
+      "actual": 329,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "boeing-747",
+      "file": "top_map/cartographic_glass.png",
+      "target": 329,
+      "actual": 329,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "boeing-747",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 329,
+      "actual": 329,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "boeing-747",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 41,
+      "actual": 41,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "boeing-747",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 41,
+      "actual": 41,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "boeing-747",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 41,
+      "actual": 41,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "boeing-757",
+      "file": "side_detail.png",
+      "target": 321,
+      "actual": 321,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "boeing-757",
+      "file": "top_map/xdr_radar.png",
+      "target": 292,
+      "actual": 292,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "boeing-757",
+      "file": "top_map/cartographic_glass.png",
+      "target": 292,
+      "actual": 292,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "boeing-757",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 292,
+      "actual": 292,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "boeing-757",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 36,
+      "actual": 36,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "boeing-757",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 36,
+      "actual": 36,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "boeing-757",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 36,
+      "actual": 36,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "boeing-767",
+      "file": "side_detail.png",
+      "target": 328,
+      "actual": 328,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "boeing-767",
+      "file": "top_map/xdr_radar.png",
+      "target": 305,
+      "actual": 305,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "boeing-767",
+      "file": "top_map/cartographic_glass.png",
+      "target": 305,
+      "actual": 305,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "boeing-767",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 305,
+      "actual": 305,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "boeing-767",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 38,
+      "actual": 38,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "boeing-767",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 38,
+      "actual": 38,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "boeing-767",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 38,
+      "actual": 38,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "boeing-777",
+      "file": "side_detail.png",
+      "target": 344,
+      "actual": 344,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "boeing-777",
+      "file": "top_map/xdr_radar.png",
+      "target": 334,
+      "actual": 334,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "boeing-777",
+      "file": "top_map/cartographic_glass.png",
+      "target": 334,
+      "actual": 334,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "boeing-777",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 334,
+      "actual": 334,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "boeing-777",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 42,
+      "actual": 42,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "boeing-777",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 42,
+      "actual": 42,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "boeing-777",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 42,
+      "actual": 42,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "boeing-787",
+      "file": "side_detail.png",
+      "target": 334,
+      "actual": 334,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "boeing-787",
+      "file": "top_map/xdr_radar.png",
+      "target": 318,
+      "actual": 318,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "boeing-787",
+      "file": "top_map/cartographic_glass.png",
+      "target": 318,
+      "actual": 318,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "boeing-787",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 318,
+      "actual": 318,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "boeing-787",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 40,
+      "actual": 40,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "boeing-787",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 40,
+      "actual": 40,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "boeing-787",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 40,
+      "actual": 40,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "bombardier-crj",
+      "file": "side_detail.png",
+      "target": 309,
+      "actual": 309,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "bombardier-crj",
+      "file": "top_map/xdr_radar.png",
+      "target": 261,
+      "actual": 261,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "bombardier-crj",
+      "file": "top_map/cartographic_glass.png",
+      "target": 261,
+      "actual": 261,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "bombardier-crj",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 261,
+      "actual": 260,
+      "delta": -1,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "bombardier-crj",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 33,
+      "actual": 33,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "bombardier-crj",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 33,
+      "actual": 33,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "bombardier-crj",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 33,
+      "actual": 33,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "cessna-172",
+      "file": "side_detail.png",
+      "target": 289,
+      "actual": 289,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "cessna-172",
+      "file": "top_map/xdr_radar.png",
+      "target": 188,
+      "actual": 188,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "cessna-172",
+      "file": "top_map/cartographic_glass.png",
+      "target": 188,
+      "actual": 188,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "cessna-172",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 188,
+      "actual": 188,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "cessna-172",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 24,
+      "actual": 24,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "cessna-172",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 24,
+      "actual": 24,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "cessna-172",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 24,
+      "actual": 24,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "cessna-208",
+      "file": "side_detail.png",
+      "target": 292,
+      "actual": 292,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "cessna-208",
+      "file": "top_map/xdr_radar.png",
+      "target": 210,
+      "actual": 210,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "cessna-208",
+      "file": "top_map/cartographic_glass.png",
+      "target": 210,
+      "actual": 210,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "cessna-208",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 210,
+      "actual": 210,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "cessna-208",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 26,
+      "actual": 26,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "cessna-208",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 26,
+      "actual": 26,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "cessna-208",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 26,
+      "actual": 26,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "cessna-408-skycourier",
+      "file": "side_detail.png",
+      "target": 296,
+      "actual": 296,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "cessna-408-skycourier",
+      "file": "top_map/xdr_radar.png",
+      "target": 232,
+      "actual": 232,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "cessna-408-skycourier",
+      "file": "top_map/cartographic_glass.png",
+      "target": 232,
+      "actual": 232,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "cessna-408-skycourier",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 232,
+      "actual": 232,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "cessna-408-skycourier",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 29,
+      "actual": 29,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "cessna-408-skycourier",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 29,
+      "actual": 29,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "cessna-408-skycourier",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 29,
+      "actual": 29,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "cessna-citation",
+      "file": "side_detail.png",
+      "target": 298,
+      "actual": 298,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "cessna-citation",
+      "file": "top_map/xdr_radar.png",
+      "target": 225,
+      "actual": 225,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "cessna-citation",
+      "file": "top_map/cartographic_glass.png",
+      "target": 225,
+      "actual": 225,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "cessna-citation",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 225,
+      "actual": 225,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "cessna-citation",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 28,
+      "actual": 28,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "cessna-citation",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 28,
+      "actual": 28,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "cessna-citation",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 28,
+      "actual": 28,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "challenger-300-family",
+      "file": "side_detail.png",
+      "target": 299,
+      "actual": 299,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "challenger-300-family",
+      "file": "top_map/xdr_radar.png",
+      "target": 228,
+      "actual": 228,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "challenger-300-family",
+      "file": "top_map/cartographic_glass.png",
+      "target": 228,
+      "actual": 228,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "challenger-300-family",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 228,
+      "actual": 228,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "challenger-300-family",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 29,
+      "actual": 29,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "challenger-300-family",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 29,
+      "actual": 29,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "challenger-300-family",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 29,
+      "actual": 29,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "cirrus-vision",
+      "file": "side_detail.png",
+      "target": 289,
+      "actual": 289,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "cirrus-vision",
+      "file": "top_map/xdr_radar.png",
+      "target": 192,
+      "actual": 192,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "cirrus-vision",
+      "file": "top_map/cartographic_glass.png",
+      "target": 192,
+      "actual": 192,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "cirrus-vision",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 192,
+      "actual": 192,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "cirrus-vision",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 24,
+      "actual": 24,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "cirrus-vision",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 24,
+      "actual": 24,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "cirrus-vision",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 24,
+      "actual": 24,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "citation-latitude",
+      "file": "side_detail.png",
+      "target": 298,
+      "actual": 298,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "citation-latitude",
+      "file": "top_map/xdr_radar.png",
+      "target": 232,
+      "actual": 232,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "citation-latitude",
+      "file": "top_map/cartographic_glass.png",
+      "target": 232,
+      "actual": 232,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "citation-latitude",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 232,
+      "actual": 232,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "citation-latitude",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 29,
+      "actual": 29,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "citation-latitude",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 29,
+      "actual": 29,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "citation-latitude",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 29,
+      "actual": 29,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "comac-c909",
+      "file": "side_detail.png",
+      "target": 310,
+      "actual": 310,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "comac-c909",
+      "file": "top_map/xdr_radar.png",
+      "target": 263,
+      "actual": 263,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "comac-c909",
+      "file": "top_map/cartographic_glass.png",
+      "target": 263,
+      "actual": 263,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "comac-c909",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 263,
+      "actual": 263,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "comac-c909",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 33,
+      "actual": 33,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "comac-c909",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 33,
+      "actual": 33,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "comac-c909",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 33,
+      "actual": 33,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "comac-c919",
+      "file": "side_detail.png",
+      "target": 314,
+      "actual": 314,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "comac-c919",
+      "file": "top_map/xdr_radar.png",
+      "target": 275,
+      "actual": 275,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "comac-c919",
+      "file": "top_map/cartographic_glass.png",
+      "target": 275,
+      "actual": 275,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "comac-c919",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 275,
+      "actual": 275,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "comac-c919",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 34,
+      "actual": 34,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "comac-c919",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 34,
+      "actual": 34,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "comac-c919",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 34,
+      "actual": 34,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "concorde",
+      "file": "side_detail.png",
+      "target": 333,
+      "actual": 333,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "concorde",
+      "file": "top_map/xdr_radar.png",
+      "target": 316,
+      "actual": 316,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "concorde",
+      "file": "top_map/cartographic_glass.png",
+      "target": 316,
+      "actual": 316,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "concorde",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 316,
+      "actual": 316,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "concorde",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 40,
+      "actual": 40,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "concorde",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 40,
+      "actual": 40,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "concorde",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 40,
+      "actual": 40,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "convair-580",
+      "file": "side_detail.png",
+      "target": 302,
+      "actual": 302,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "convair-580",
+      "file": "top_map/xdr_radar.png",
+      "target": 260,
+      "actual": 260,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "convair-580",
+      "file": "top_map/cartographic_glass.png",
+      "target": 260,
+      "actual": 260,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "convair-580",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 260,
+      "actual": 260,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "convair-580",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 32,
+      "actual": 32,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "convair-580",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 32,
+      "actual": 32,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "convair-580",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 32,
+      "actual": 32,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "dash-8",
+      "file": "side_detail.png",
+      "target": 309,
+      "actual": 309,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "dash-8",
+      "file": "top_map/xdr_radar.png",
+      "target": 261,
+      "actual": 261,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "dash-8",
+      "file": "top_map/cartographic_glass.png",
+      "target": 261,
+      "actual": 261,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "dash-8",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 261,
+      "actual": 261,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "dash-8",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 33,
+      "actual": 33,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "dash-8",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 33,
+      "actual": 33,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "dash-8",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 33,
+      "actual": 33,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "dc-10",
+      "file": "side_detail.png",
+      "target": 328,
+      "actual": 328,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "dc-10",
+      "file": "top_map/xdr_radar.png",
+      "target": 306,
+      "actual": 306,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "dc-10",
+      "file": "top_map/cartographic_glass.png",
+      "target": 306,
+      "actual": 306,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "dc-10",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 306,
+      "actual": 306,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "dc-10",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 38,
+      "actual": 38,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "dc-10",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 38,
+      "actual": 38,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "dc-10",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 38,
+      "actual": 38,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "dc-8",
+      "file": "side_detail.png",
+      "target": 329,
+      "actual": 329,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "dc-8",
+      "file": "top_map/xdr_radar.png",
+      "target": 309,
+      "actual": 309,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "dc-8",
+      "file": "top_map/cartographic_glass.png",
+      "target": 309,
+      "actual": 309,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "dc-8",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 309,
+      "actual": 309,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "dc-8",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 39,
+      "actual": 39,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "dc-8",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 39,
+      "actual": 39,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "dc-8",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 39,
+      "actual": 39,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "dhc-6-twin-otter",
+      "file": "side_detail.png",
+      "target": 295,
+      "actual": 295,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "dhc-6-twin-otter",
+      "file": "top_map/xdr_radar.png",
+      "target": 225,
+      "actual": 225,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "dhc-6-twin-otter",
+      "file": "top_map/cartographic_glass.png",
+      "target": 225,
+      "actual": 225,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "dhc-6-twin-otter",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 225,
+      "actual": 225,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "dhc-6-twin-otter",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 28,
+      "actual": 28,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "dhc-6-twin-otter",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 28,
+      "actual": 28,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "dhc-6-twin-otter",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 28,
+      "actual": 28,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "dornier-228",
+      "file": "side_detail.png",
+      "target": 296,
+      "actual": 296,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "dornier-228",
+      "file": "top_map/xdr_radar.png",
+      "target": 215,
+      "actual": 215,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "dornier-228",
+      "file": "top_map/cartographic_glass.png",
+      "target": 215,
+      "actual": 215,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "dornier-228",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 215,
+      "actual": 215,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "dornier-228",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 27,
+      "actual": 27,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "dornier-228",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 27,
+      "actual": 27,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "dornier-228",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 27,
+      "actual": 27,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "dornier-328",
+      "file": "side_detail.png",
+      "target": 299,
+      "actual": 299,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "dornier-328",
+      "file": "top_map/xdr_radar.png",
+      "target": 229,
+      "actual": 229,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "dornier-328",
+      "file": "top_map/cartographic_glass.png",
+      "target": 229,
+      "actual": 229,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "dornier-328",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 229,
+      "actual": 229,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "dornier-328",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 29,
+      "actual": 29,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "dornier-328",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 29,
+      "actual": 29,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "dornier-328",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 29,
+      "actual": 29,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "embraer-120",
+      "file": "side_detail.png",
+      "target": 298,
+      "actual": 298,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "embraer-120",
+      "file": "top_map/xdr_radar.png",
+      "target": 225,
+      "actual": 225,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "embraer-120",
+      "file": "top_map/cartographic_glass.png",
+      "target": 225,
+      "actual": 225,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "embraer-120",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 225,
+      "actual": 225,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "embraer-120",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 28,
+      "actual": 28,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "embraer-120",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 28,
+      "actual": 28,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "embraer-120",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 28,
+      "actual": 28,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "embraer-e-jet",
+      "file": "side_detail.png",
+      "target": 312,
+      "actual": 312,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "embraer-e-jet",
+      "file": "top_map/xdr_radar.png",
+      "target": 269,
+      "actual": 269,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "embraer-e-jet",
+      "file": "top_map/cartographic_glass.png",
+      "target": 269,
+      "actual": 269,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "embraer-e-jet",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 269,
+      "actual": 269,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "embraer-e-jet",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 34,
+      "actual": 34,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "embraer-e-jet",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 34,
+      "actual": 34,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "embraer-e-jet",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 34,
+      "actual": 34,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "falcon-8x",
+      "file": "side_detail.png",
+      "target": 302,
+      "actual": 302,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "falcon-8x",
+      "file": "top_map/xdr_radar.png",
+      "target": 245,
+      "actual": 245,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "falcon-8x",
+      "file": "top_map/cartographic_glass.png",
+      "target": 245,
+      "actual": 245,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "falcon-8x",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 245,
+      "actual": 245,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "falcon-8x",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 31,
+      "actual": 31,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "falcon-8x",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 31,
+      "actual": 31,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "falcon-8x",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 31,
+      "actual": 31,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "fokker-100",
+      "file": "side_detail.png",
+      "target": 311,
+      "actual": 311,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "fokker-100",
+      "file": "top_map/xdr_radar.png",
+      "target": 268,
+      "actual": 268,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "fokker-100",
+      "file": "top_map/cartographic_glass.png",
+      "target": 268,
+      "actual": 268,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "fokker-100",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 268,
+      "actual": 268,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "fokker-100",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 33,
+      "actual": 33,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "fokker-100",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 33,
+      "actual": 33,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "fokker-100",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 33,
+      "actual": 33,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-business-jet",
+      "file": "side_detail.png",
+      "target": 299,
+      "actual": 299,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "generic-business-jet",
+      "file": "top_map/xdr_radar.png",
+      "target": 228,
+      "actual": 228,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-business-jet",
+      "file": "top_map/cartographic_glass.png",
+      "target": 228,
+      "actual": 228,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-business-jet",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 228,
+      "actual": 228,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-business-jet",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 29,
+      "actual": 29,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-business-jet",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 29,
+      "actual": 29,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-business-jet",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 29,
+      "actual": 29,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-coaxial-helicopter",
+      "file": "side_detail.png",
+      "target": 291,
+      "actual": 291,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "generic-coaxial-helicopter",
+      "file": "top_map/xdr_radar.png",
+      "target": 210,
+      "actual": 210,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-coaxial-helicopter",
+      "file": "top_map/cartographic_glass.png",
+      "target": 210,
+      "actual": 210,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-coaxial-helicopter",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 210,
+      "actual": 210,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-coaxial-helicopter",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 26,
+      "actual": 26,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-coaxial-helicopter",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 26,
+      "actual": 26,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-coaxial-helicopter",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 26,
+      "actual": 26,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-four-engine-widebody",
+      "file": "side_detail.png",
+      "target": 341,
+      "actual": 341,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "generic-four-engine-widebody",
+      "file": "top_map/xdr_radar.png",
+      "target": 329,
+      "actual": 329,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-four-engine-widebody",
+      "file": "top_map/cartographic_glass.png",
+      "target": 329,
+      "actual": 329,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-four-engine-widebody",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 329,
+      "actual": 329,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-four-engine-widebody",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 41,
+      "actual": 41,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-four-engine-widebody",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 41,
+      "actual": 41,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-four-engine-widebody",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 41,
+      "actual": 41,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-heavy-utility-helicopter",
+      "file": "side_detail.png",
+      "target": 297,
+      "actual": 297,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "generic-heavy-utility-helicopter",
+      "file": "top_map/xdr_radar.png",
+      "target": 230,
+      "actual": 230,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-heavy-utility-helicopter",
+      "file": "top_map/cartographic_glass.png",
+      "target": 230,
+      "actual": 230,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-heavy-utility-helicopter",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 230,
+      "actual": 229,
+      "delta": -1,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-heavy-utility-helicopter",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 29,
+      "actual": 29,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-heavy-utility-helicopter",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 29,
+      "actual": 29,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-heavy-utility-helicopter",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 29,
+      "actual": 29,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-helicopter",
+      "file": "side_detail.png",
+      "target": 292,
+      "actual": 292,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "generic-helicopter",
+      "file": "top_map/xdr_radar.png",
+      "target": 194,
+      "actual": 194,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-helicopter",
+      "file": "top_map/cartographic_glass.png",
+      "target": 194,
+      "actual": 193,
+      "delta": -1,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-helicopter",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 194,
+      "actual": 194,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-helicopter",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 24,
+      "actual": 24,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-helicopter",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 24,
+      "actual": 24,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-helicopter",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 24,
+      "actual": 24,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-light-piston-helicopter",
+      "file": "side_detail.png",
+      "target": 289,
+      "actual": 289,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "generic-light-piston-helicopter",
+      "file": "top_map/xdr_radar.png",
+      "target": 176,
+      "actual": 176,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-light-piston-helicopter",
+      "file": "top_map/cartographic_glass.png",
+      "target": 176,
+      "actual": 176,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-light-piston-helicopter",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 176,
+      "actual": 176,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-light-piston-helicopter",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 22,
+      "actual": 22,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-light-piston-helicopter",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 22,
+      "actual": 22,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-light-piston-helicopter",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 22,
+      "actual": 22,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-light-single-piston",
+      "file": "side_detail.png",
+      "target": 289,
+      "actual": 289,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "generic-light-single-piston",
+      "file": "top_map/xdr_radar.png",
+      "target": 188,
+      "actual": 188,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-light-single-piston",
+      "file": "top_map/cartographic_glass.png",
+      "target": 188,
+      "actual": 188,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-light-single-piston",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 188,
+      "actual": 188,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-light-single-piston",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 24,
+      "actual": 24,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-light-single-piston",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 24,
+      "actual": 24,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-light-single-piston",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 24,
+      "actual": 24,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-light-turboprop",
+      "file": "side_detail.png",
+      "target": 292,
+      "actual": 292,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "generic-light-turboprop",
+      "file": "top_map/xdr_radar.png",
+      "target": 210,
+      "actual": 210,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-light-turboprop",
+      "file": "top_map/cartographic_glass.png",
+      "target": 210,
+      "actual": 210,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-light-turboprop",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 210,
+      "actual": 210,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-light-turboprop",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 26,
+      "actual": 26,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-light-turboprop",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 26,
+      "actual": 26,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-light-turboprop",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 26,
+      "actual": 26,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-light-twin-piston",
+      "file": "side_detail.png",
+      "target": 289,
+      "actual": 289,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "generic-light-twin-piston",
+      "file": "top_map/xdr_radar.png",
+      "target": 193,
+      "actual": 193,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-light-twin-piston",
+      "file": "top_map/cartographic_glass.png",
+      "target": 193,
+      "actual": 193,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-light-twin-piston",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 193,
+      "actual": 193,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-light-twin-piston",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 24,
+      "actual": 24,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-light-twin-piston",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 24,
+      "actual": 24,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-light-twin-piston",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 24,
+      "actual": 24,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-narrowbody-twinjet",
+      "file": "side_detail.png",
+      "target": 315,
+      "actual": 315,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "generic-narrowbody-twinjet",
+      "file": "top_map/xdr_radar.png",
+      "target": 276,
+      "actual": 276,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-narrowbody-twinjet",
+      "file": "top_map/cartographic_glass.png",
+      "target": 276,
+      "actual": 276,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-narrowbody-twinjet",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 276,
+      "actual": 276,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-narrowbody-twinjet",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 35,
+      "actual": 35,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-narrowbody-twinjet",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 35,
+      "actual": 35,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-narrowbody-twinjet",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 35,
+      "actual": 35,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-regional-jet",
+      "file": "side_detail.png",
+      "target": 309,
+      "actual": 309,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "generic-regional-jet",
+      "file": "top_map/xdr_radar.png",
+      "target": 261,
+      "actual": 261,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-regional-jet",
+      "file": "top_map/cartographic_glass.png",
+      "target": 261,
+      "actual": 261,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-regional-jet",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 261,
+      "actual": 261,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-regional-jet",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 33,
+      "actual": 33,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-regional-jet",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 33,
+      "actual": 33,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-regional-jet",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 33,
+      "actual": 33,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-single-prop",
+      "file": "side_detail.png",
+      "target": 292,
+      "actual": 292,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "generic-single-prop",
+      "file": "top_map/xdr_radar.png",
+      "target": 210,
+      "actual": 210,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-single-prop",
+      "file": "top_map/cartographic_glass.png",
+      "target": 210,
+      "actual": 210,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-single-prop",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 210,
+      "actual": 210,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-single-prop",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 26,
+      "actual": 26,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-single-prop",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 26,
+      "actual": 26,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-single-prop",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 26,
+      "actual": 26,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-single-turbine-helicopter",
+      "file": "side_detail.png",
+      "target": 292,
+      "actual": 292,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "generic-single-turbine-helicopter",
+      "file": "top_map/xdr_radar.png",
+      "target": 194,
+      "actual": 194,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-single-turbine-helicopter",
+      "file": "top_map/cartographic_glass.png",
+      "target": 194,
+      "actual": 193,
+      "delta": -1,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-single-turbine-helicopter",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 194,
+      "actual": 194,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-single-turbine-helicopter",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 24,
+      "actual": 24,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-single-turbine-helicopter",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 24,
+      "actual": 24,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-single-turbine-helicopter",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 24,
+      "actual": 24,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-small-cargo-feeder",
+      "file": "side_detail.png",
+      "target": 296,
+      "actual": 296,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "generic-small-cargo-feeder",
+      "file": "top_map/xdr_radar.png",
+      "target": 232,
+      "actual": 232,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-small-cargo-feeder",
+      "file": "top_map/cartographic_glass.png",
+      "target": 232,
+      "actual": 232,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-small-cargo-feeder",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 232,
+      "actual": 232,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-small-cargo-feeder",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 29,
+      "actual": 29,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-small-cargo-feeder",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 29,
+      "actual": 29,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-small-cargo-feeder",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 29,
+      "actual": 29,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-trijet",
+      "file": "side_detail.png",
+      "target": 328,
+      "actual": 328,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "generic-trijet",
+      "file": "top_map/xdr_radar.png",
+      "target": 306,
+      "actual": 306,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-trijet",
+      "file": "top_map/cartographic_glass.png",
+      "target": 306,
+      "actual": 306,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-trijet",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 306,
+      "actual": 306,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-trijet",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 38,
+      "actual": 38,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-trijet",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 38,
+      "actual": 38,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-trijet",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 38,
+      "actual": 38,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-turboprop",
+      "file": "side_detail.png",
+      "target": 304,
+      "actual": 304,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "generic-turboprop",
+      "file": "top_map/xdr_radar.png",
+      "target": 247,
+      "actual": 247,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-turboprop",
+      "file": "top_map/cartographic_glass.png",
+      "target": 247,
+      "actual": 247,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-turboprop",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 247,
+      "actual": 247,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-turboprop",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 31,
+      "actual": 31,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-turboprop",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 31,
+      "actual": 31,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-turboprop",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 31,
+      "actual": 31,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-twin-engine-helicopter",
+      "file": "side_detail.png",
+      "target": 294,
+      "actual": 294,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "generic-twin-engine-helicopter",
+      "file": "top_map/xdr_radar.png",
+      "target": 205,
+      "actual": 205,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-twin-engine-helicopter",
+      "file": "top_map/cartographic_glass.png",
+      "target": 205,
+      "actual": 204,
+      "delta": -1,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-twin-engine-helicopter",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 205,
+      "actual": 205,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-twin-engine-helicopter",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 26,
+      "actual": 26,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-twin-engine-helicopter",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 26,
+      "actual": 26,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-twin-engine-helicopter",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 26,
+      "actual": 26,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-utility-stol",
+      "file": "side_detail.png",
+      "target": 292,
+      "actual": 292,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "generic-utility-stol",
+      "file": "top_map/xdr_radar.png",
+      "target": 215,
+      "actual": 215,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-utility-stol",
+      "file": "top_map/cartographic_glass.png",
+      "target": 215,
+      "actual": 215,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-utility-stol",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 215,
+      "actual": 215,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-utility-stol",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 27,
+      "actual": 27,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-utility-stol",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 27,
+      "actual": 27,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-utility-stol",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 27,
+      "actual": 27,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-widebody-twinjet",
+      "file": "side_detail.png",
+      "target": 338,
+      "actual": 338,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "generic-widebody-twinjet",
+      "file": "top_map/xdr_radar.png",
+      "target": 324,
+      "actual": 324,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-widebody-twinjet",
+      "file": "top_map/cartographic_glass.png",
+      "target": 324,
+      "actual": 324,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-widebody-twinjet",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 324,
+      "actual": 324,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-widebody-twinjet",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 40,
+      "actual": 40,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-widebody-twinjet",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 40,
+      "actual": 40,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "generic-widebody-twinjet",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 40,
+      "actual": 40,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "global-7500",
+      "file": "side_detail.png",
+      "target": 310,
+      "actual": 310,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "global-7500",
+      "file": "top_map/xdr_radar.png",
+      "target": 264,
+      "actual": 264,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "global-7500",
+      "file": "top_map/cartographic_glass.png",
+      "target": 264,
+      "actual": 264,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "global-7500",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 264,
+      "actual": 264,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "global-7500",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 33,
+      "actual": 33,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "global-7500",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 33,
+      "actual": 33,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "global-7500",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 33,
+      "actual": 33,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "gulfstream-g550",
+      "file": "side_detail.png",
+      "target": 306,
+      "actual": 306,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "gulfstream-g550",
+      "file": "top_map/xdr_radar.png",
+      "target": 253,
+      "actual": 253,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "gulfstream-g550",
+      "file": "top_map/cartographic_glass.png",
+      "target": 253,
+      "actual": 253,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "gulfstream-g550",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 253,
+      "actual": 253,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "gulfstream-g550",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 32,
+      "actual": 32,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "gulfstream-g550",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 32,
+      "actual": 32,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "gulfstream-g550",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 32,
+      "actual": 32,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "gulfstream-g650",
+      "file": "side_detail.png",
+      "target": 307,
+      "actual": 307,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "gulfstream-g650",
+      "file": "top_map/xdr_radar.png",
+      "target": 256,
+      "actual": 256,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "gulfstream-g650",
+      "file": "top_map/cartographic_glass.png",
+      "target": 256,
+      "actual": 256,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "gulfstream-g650",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 256,
+      "actual": 256,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "gulfstream-g650",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 32,
+      "actual": 32,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "gulfstream-g650",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 32,
+      "actual": 32,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "gulfstream-g650",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 32,
+      "actual": 32,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "hondajet",
+      "file": "side_detail.png",
+      "target": 292,
+      "actual": 292,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "hondajet",
+      "file": "top_map/xdr_radar.png",
+      "target": 198,
+      "actual": 198,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "hondajet",
+      "file": "top_map/cartographic_glass.png",
+      "target": 198,
+      "actual": 198,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "hondajet",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 198,
+      "actual": 198,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "hondajet",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 25,
+      "actual": 25,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "hondajet",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 25,
+      "actual": 25,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "hondajet",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 25,
+      "actual": 25,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "ilyushin-il-62",
+      "file": "side_detail.png",
+      "target": 326,
+      "actual": 326,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "ilyushin-il-62",
+      "file": "top_map/xdr_radar.png",
+      "target": 302,
+      "actual": 302,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "ilyushin-il-62",
+      "file": "top_map/cartographic_glass.png",
+      "target": 302,
+      "actual": 302,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "ilyushin-il-62",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 302,
+      "actual": 302,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "ilyushin-il-62",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 38,
+      "actual": 38,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "ilyushin-il-62",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 38,
+      "actual": 38,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "ilyushin-il-62",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 38,
+      "actual": 38,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "ilyushin-il-76",
+      "file": "side_detail.png",
+      "target": 321,
+      "actual": 321,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "ilyushin-il-76",
+      "file": "top_map/xdr_radar.png",
+      "target": 298,
+      "actual": 298,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "ilyushin-il-76",
+      "file": "top_map/cartographic_glass.png",
+      "target": 298,
+      "actual": 298,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "ilyushin-il-76",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 298,
+      "actual": 298,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "ilyushin-il-76",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 37,
+      "actual": 37,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "ilyushin-il-76",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 37,
+      "actual": 37,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "ilyushin-il-76",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 37,
+      "actual": 37,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "ilyushin-il-96",
+      "file": "side_detail.png",
+      "target": 328,
+      "actual": 328,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "ilyushin-il-96",
+      "file": "top_map/xdr_radar.png",
+      "target": 314,
+      "actual": 314,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "ilyushin-il-96",
+      "file": "top_map/cartographic_glass.png",
+      "target": 314,
+      "actual": 314,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "ilyushin-il-96",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 314,
+      "actual": 314,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "ilyushin-il-96",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 39,
+      "actual": 39,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "ilyushin-il-96",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 39,
+      "actual": 39,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "ilyushin-il-96",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 39,
+      "actual": 39,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "irkut-mc-21",
+      "file": "side_detail.png",
+      "target": 317,
+      "actual": 317,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "irkut-mc-21",
+      "file": "top_map/xdr_radar.png",
+      "target": 282,
+      "actual": 282,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "irkut-mc-21",
+      "file": "top_map/cartographic_glass.png",
+      "target": 282,
+      "actual": 282,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "irkut-mc-21",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 282,
+      "actual": 282,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "irkut-mc-21",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 35,
+      "actual": 35,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "irkut-mc-21",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 35,
+      "actual": 35,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "irkut-mc-21",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 35,
+      "actual": 35,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "kamov-ka-32",
+      "file": "side_detail.png",
+      "target": 291,
+      "actual": 291,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "kamov-ka-32",
+      "file": "top_map/xdr_radar.png",
+      "target": 210,
+      "actual": 210,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "kamov-ka-32",
+      "file": "top_map/cartographic_glass.png",
+      "target": 210,
+      "actual": 210,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "kamov-ka-32",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 210,
+      "actual": 210,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "kamov-ka-32",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 26,
+      "actual": 26,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "kamov-ka-32",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 26,
+      "actual": 26,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "kamov-ka-32",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 26,
+      "actual": 26,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "learjet-75",
+      "file": "side_detail.png",
+      "target": 296,
+      "actual": 296,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "learjet-75",
+      "file": "top_map/xdr_radar.png",
+      "target": 217,
+      "actual": 217,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "learjet-75",
+      "file": "top_map/cartographic_glass.png",
+      "target": 217,
+      "actual": 217,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "learjet-75",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 217,
+      "actual": 217,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "learjet-75",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 27,
+      "actual": 27,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "learjet-75",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 27,
+      "actual": 27,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "learjet-75",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 27,
+      "actual": 27,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "leonardo-aw109",
+      "file": "side_detail.png",
+      "target": 292,
+      "actual": 292,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "leonardo-aw109",
+      "file": "top_map/xdr_radar.png",
+      "target": 198,
+      "actual": 198,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "leonardo-aw109",
+      "file": "top_map/cartographic_glass.png",
+      "target": 198,
+      "actual": 198,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "leonardo-aw109",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 198,
+      "actual": 198,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "leonardo-aw109",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 25,
+      "actual": 25,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "leonardo-aw109",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 25,
+      "actual": 25,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "leonardo-aw109",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 25,
+      "actual": 25,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "leonardo-aw119",
+      "file": "side_detail.png",
+      "target": 292,
+      "actual": 292,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "leonardo-aw119",
+      "file": "top_map/xdr_radar.png",
+      "target": 198,
+      "actual": 198,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "leonardo-aw119",
+      "file": "top_map/cartographic_glass.png",
+      "target": 198,
+      "actual": 198,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "leonardo-aw119",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 198,
+      "actual": 198,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "leonardo-aw119",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 25,
+      "actual": 25,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "leonardo-aw119",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 25,
+      "actual": 25,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "leonardo-aw119",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 25,
+      "actual": 25,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "leonardo-aw139",
+      "file": "side_detail.png",
+      "target": 296,
+      "actual": 296,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "leonardo-aw139",
+      "file": "top_map/xdr_radar.png",
+      "target": 214,
+      "actual": 214,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "leonardo-aw139",
+      "file": "top_map/cartographic_glass.png",
+      "target": 214,
+      "actual": 214,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "leonardo-aw139",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 214,
+      "actual": 213,
+      "delta": -1,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "leonardo-aw139",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 27,
+      "actual": 27,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "leonardo-aw139",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 27,
+      "actual": 27,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "leonardo-aw139",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 27,
+      "actual": 27,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "leonardo-aw169",
+      "file": "side_detail.png",
+      "target": 294,
+      "actual": 294,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "leonardo-aw169",
+      "file": "top_map/xdr_radar.png",
+      "target": 205,
+      "actual": 205,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "leonardo-aw169",
+      "file": "top_map/cartographic_glass.png",
+      "target": 205,
+      "actual": 204,
+      "delta": -1,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "leonardo-aw169",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 205,
+      "actual": 205,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "leonardo-aw169",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 26,
+      "actual": 26,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "leonardo-aw169",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 26,
+      "actual": 26,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "leonardo-aw169",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 26,
+      "actual": 26,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "let-l-410",
+      "file": "side_detail.png",
+      "target": 294,
+      "actual": 294,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "let-l-410",
+      "file": "top_map/xdr_radar.png",
+      "target": 224,
+      "actual": 224,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "let-l-410",
+      "file": "top_map/cartographic_glass.png",
+      "target": 224,
+      "actual": 224,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "let-l-410",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 224,
+      "actual": 224,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "let-l-410",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 28,
+      "actual": 28,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "let-l-410",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 28,
+      "actual": 28,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "let-l-410",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 28,
+      "actual": 28,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "lockheed-l-1011",
+      "file": "side_detail.png",
+      "target": 327,
+      "actual": 327,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "lockheed-l-1011",
+      "file": "top_map/xdr_radar.png",
+      "target": 304,
+      "actual": 304,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "lockheed-l-1011",
+      "file": "top_map/cartographic_glass.png",
+      "target": 304,
+      "actual": 304,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "lockheed-l-1011",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 304,
+      "actual": 304,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "lockheed-l-1011",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 38,
+      "actual": 38,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "lockheed-l-1011",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 38,
+      "actual": 38,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "lockheed-l-1011",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 38,
+      "actual": 38,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "md-11",
+      "file": "side_detail.png",
+      "target": 333,
+      "actual": 333,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "md-11",
+      "file": "top_map/xdr_radar.png",
+      "target": 315,
+      "actual": 315,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "md-11",
+      "file": "top_map/cartographic_glass.png",
+      "target": 315,
+      "actual": 315,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "md-11",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 315,
+      "actual": 315,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "md-11",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 39,
+      "actual": 39,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "md-11",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 39,
+      "actual": 39,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "md-11",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 39,
+      "actual": 39,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "md-500",
+      "file": "side_detail.png",
+      "target": 289,
+      "actual": 289,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "md-500",
+      "file": "top_map/xdr_radar.png",
+      "target": 180,
+      "actual": 180,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "md-500",
+      "file": "top_map/cartographic_glass.png",
+      "target": 180,
+      "actual": 180,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "md-500",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 180,
+      "actual": 180,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "md-500",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 22,
+      "actual": 22,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "md-500",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 22,
+      "actual": 22,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "md-500",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 22,
+      "actual": 22,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "md-80",
+      "file": "side_detail.png",
+      "target": 319,
+      "actual": 319,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "md-80",
+      "file": "top_map/xdr_radar.png",
+      "target": 288,
+      "actual": 288,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "md-80",
+      "file": "top_map/cartographic_glass.png",
+      "target": 288,
+      "actual": 288,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "md-80",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 288,
+      "actual": 288,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "md-80",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 36,
+      "actual": 36,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "md-80",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 36,
+      "actual": 36,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "md-80",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 36,
+      "actual": 36,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "md-902",
+      "file": "side_detail.png",
+      "target": 290,
+      "actual": 290,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "md-902",
+      "file": "top_map/xdr_radar.png",
+      "target": 185,
+      "actual": 185,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "md-902",
+      "file": "top_map/cartographic_glass.png",
+      "target": 185,
+      "actual": 184,
+      "delta": -1,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "md-902",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 185,
+      "actual": 185,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "md-902",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 23,
+      "actual": 23,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "md-902",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 23,
+      "actual": 23,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "md-902",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 23,
+      "actual": 23,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "mil-mi-8",
+      "file": "side_detail.png",
+      "target": 297,
+      "actual": 297,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "mil-mi-8",
+      "file": "top_map/xdr_radar.png",
+      "target": 230,
+      "actual": 230,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "mil-mi-8",
+      "file": "top_map/cartographic_glass.png",
+      "target": 230,
+      "actual": 230,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "mil-mi-8",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 230,
+      "actual": 229,
+      "delta": -1,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "mil-mi-8",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 29,
+      "actual": 29,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "mil-mi-8",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 29,
+      "actual": 29,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "mil-mi-8",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 29,
+      "actual": 29,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "phenom-300",
+      "file": "side_detail.png",
+      "target": 295,
+      "actual": 295,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "phenom-300",
+      "file": "top_map/xdr_radar.png",
+      "target": 212,
+      "actual": 212,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "phenom-300",
+      "file": "top_map/cartographic_glass.png",
+      "target": 212,
+      "actual": 212,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "phenom-300",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 212,
+      "actual": 212,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "phenom-300",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 26,
+      "actual": 26,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "phenom-300",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 26,
+      "actual": 26,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "phenom-300",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 26,
+      "actual": 26,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "pilatus-pc-12",
+      "file": "side_detail.png",
+      "target": 294,
+      "actual": 294,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "pilatus-pc-12",
+      "file": "top_map/xdr_radar.png",
+      "target": 212,
+      "actual": 212,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "pilatus-pc-12",
+      "file": "top_map/cartographic_glass.png",
+      "target": 212,
+      "actual": 212,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "pilatus-pc-12",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 212,
+      "actual": 212,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "pilatus-pc-12",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 26,
+      "actual": 26,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "pilatus-pc-12",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 26,
+      "actual": 26,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "pilatus-pc-12",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 26,
+      "actual": 26,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "pilatus-pc-24",
+      "file": "side_detail.png",
+      "target": 296,
+      "actual": 296,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "pilatus-pc-24",
+      "file": "top_map/xdr_radar.png",
+      "target": 215,
+      "actual": 215,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "pilatus-pc-24",
+      "file": "top_map/cartographic_glass.png",
+      "target": 215,
+      "actual": 215,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "pilatus-pc-24",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 215,
+      "actual": 215,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "pilatus-pc-24",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 27,
+      "actual": 27,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "pilatus-pc-24",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 27,
+      "actual": 27,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "pilatus-pc-24",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 27,
+      "actual": 27,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "praetor-family",
+      "file": "side_detail.png",
+      "target": 299,
+      "actual": 299,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "praetor-family",
+      "file": "top_map/xdr_radar.png",
+      "target": 230,
+      "actual": 230,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "praetor-family",
+      "file": "top_map/cartographic_glass.png",
+      "target": 230,
+      "actual": 230,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "praetor-family",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 230,
+      "actual": 230,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "praetor-family",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 29,
+      "actual": 29,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "praetor-family",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 29,
+      "actual": 29,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "praetor-family",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 29,
+      "actual": 29,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "robinson-r22",
+      "file": "side_detail.png",
+      "target": 289,
+      "actual": 289,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "robinson-r22",
+      "file": "top_map/xdr_radar.png",
+      "target": 176,
+      "actual": 176,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "robinson-r22",
+      "file": "top_map/cartographic_glass.png",
+      "target": 176,
+      "actual": 176,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "robinson-r22",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 176,
+      "actual": 176,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "robinson-r22",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 22,
+      "actual": 22,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "robinson-r22",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 22,
+      "actual": 22,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "robinson-r22",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 22,
+      "actual": 22,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "robinson-r44",
+      "file": "side_detail.png",
+      "target": 289,
+      "actual": 289,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "robinson-r44",
+      "file": "top_map/xdr_radar.png",
+      "target": 184,
+      "actual": 184,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "robinson-r44",
+      "file": "top_map/cartographic_glass.png",
+      "target": 184,
+      "actual": 184,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "robinson-r44",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 184,
+      "actual": 183,
+      "delta": -1,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "robinson-r44",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 23,
+      "actual": 23,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "robinson-r44",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 23,
+      "actual": 23,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "robinson-r44",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 23,
+      "actual": 23,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "saab-340",
+      "file": "side_detail.png",
+      "target": 298,
+      "actual": 298,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "saab-340",
+      "file": "top_map/xdr_radar.png",
+      "target": 230,
+      "actual": 230,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "saab-340",
+      "file": "top_map/cartographic_glass.png",
+      "target": 230,
+      "actual": 230,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "saab-340",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 230,
+      "actual": 230,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "saab-340",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 29,
+      "actual": 29,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "saab-340",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 29,
+      "actual": 29,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "saab-340",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 29,
+      "actual": 29,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "sikorsky-s-76",
+      "file": "side_detail.png",
+      "target": 295,
+      "actual": 295,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "sikorsky-s-76",
+      "file": "top_map/xdr_radar.png",
+      "target": 211,
+      "actual": 211,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "sikorsky-s-76",
+      "file": "top_map/cartographic_glass.png",
+      "target": 211,
+      "actual": 211,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "sikorsky-s-76",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 211,
+      "actual": 211,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "sikorsky-s-76",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 26,
+      "actual": 26,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "sikorsky-s-76",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 26,
+      "actual": 26,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "sikorsky-s-76",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 26,
+      "actual": 26,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "sikorsky-s-92",
+      "file": "side_detail.png",
+      "target": 299,
+      "actual": 299,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "sikorsky-s-92",
+      "file": "top_map/xdr_radar.png",
+      "target": 228,
+      "actual": 228,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "sikorsky-s-92",
+      "file": "top_map/cartographic_glass.png",
+      "target": 228,
+      "actual": 227,
+      "delta": -1,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "sikorsky-s-92",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 228,
+      "actual": 228,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "sikorsky-s-92",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 29,
+      "actual": 29,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "sikorsky-s-92",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 29,
+      "actual": 29,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "sikorsky-s-92",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 29,
+      "actual": 29,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "sukhoi-superjet",
+      "file": "side_detail.png",
+      "target": 307,
+      "actual": 307,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "sukhoi-superjet",
+      "file": "top_map/xdr_radar.png",
+      "target": 254,
+      "actual": 254,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "sukhoi-superjet",
+      "file": "top_map/cartographic_glass.png",
+      "target": 254,
+      "actual": 254,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "sukhoi-superjet",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 254,
+      "actual": 254,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "sukhoi-superjet",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 32,
+      "actual": 32,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "sukhoi-superjet",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 32,
+      "actual": 32,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "sukhoi-superjet",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 32,
+      "actual": 32,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "swearingen-metro",
+      "file": "side_detail.png",
+      "target": 297,
+      "actual": 297,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "swearingen-metro",
+      "file": "top_map/xdr_radar.png",
+      "target": 219,
+      "actual": 219,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "swearingen-metro",
+      "file": "top_map/cartographic_glass.png",
+      "target": 219,
+      "actual": 219,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "swearingen-metro",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 219,
+      "actual": 219,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "swearingen-metro",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 27,
+      "actual": 27,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "swearingen-metro",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 27,
+      "actual": 27,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "swearingen-metro",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 27,
+      "actual": 27,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "tupolev-tu-154",
+      "file": "side_detail.png",
+      "target": 322,
+      "actual": 322,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "tupolev-tu-154",
+      "file": "top_map/xdr_radar.png",
+      "target": 293,
+      "actual": 293,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "tupolev-tu-154",
+      "file": "top_map/cartographic_glass.png",
+      "target": 293,
+      "actual": 293,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "tupolev-tu-154",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 293,
+      "actual": 293,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "tupolev-tu-154",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 37,
+      "actual": 37,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "tupolev-tu-154",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 37,
+      "actual": 37,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "tupolev-tu-154",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 37,
+      "actual": 37,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "tupolev-tu-204",
+      "file": "side_detail.png",
+      "target": 320,
+      "actual": 320,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "tupolev-tu-204",
+      "file": "top_map/xdr_radar.png",
+      "target": 290,
+      "actual": 290,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "tupolev-tu-204",
+      "file": "top_map/cartographic_glass.png",
+      "target": 290,
+      "actual": 290,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "tupolev-tu-204",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 290,
+      "actual": 290,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "tupolev-tu-204",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 36,
+      "actual": 36,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "tupolev-tu-204",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 36,
+      "actual": 36,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "tupolev-tu-204",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 36,
+      "actual": 36,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "yakovlev-yak-42",
+      "file": "side_detail.png",
+      "target": 312,
+      "actual": 312,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "detail view: compressed length scale, minimum 0.8"
+    },
+    {
+      "slug": "yakovlev-yak-42",
+      "file": "top_map/xdr_radar.png",
+      "target": 270,
+      "actual": 270,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "yakovlev-yak-42",
+      "file": "top_map/cartographic_glass.png",
+      "target": 270,
+      "actual": 270,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "yakovlev-yak-42",
+      "file": "top_map/gmt_chronograph.png",
+      "target": 270,
+      "actual": 270,
+      "delta": 0,
+      "canvas": "400x400",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "yakovlev-yak-42",
+      "file": "top_map/xdr_radar_50.png",
+      "target": 34,
+      "actual": 34,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "yakovlev-yak-42",
+      "file": "top_map/cartographic_glass_50.png",
+      "target": 34,
+      "actual": 34,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    },
+    {
+      "slug": "yakovlev-yak-42",
+      "file": "top_map/gmt_chronograph_50.png",
+      "target": 34,
+      "actual": 34,
+      "delta": 0,
+      "canvas": "50x50",
+      "policy": "map view: nonlinear physical scale, exponent 0.3"
+    }
+  ]
+}
