@@ -18,7 +18,7 @@ struct RouteFrameMapRenderer: FlightMapRendering {
         defer { image.unlockFocus() }
 
         drawOcean(size: size)
-        drawLandPolygons(landPolygons, projection: projection, size: size)
+        drawLandMask(projection: projection, size: size)
         drawGraticule(projection: projection, size: size)
         drawCoastlines(
             landPolygons,
@@ -48,28 +48,17 @@ struct RouteFrameMapRenderer: FlightMapRendering {
         glow2?.draw(in: NSBezierPath(ovalIn: CGRect(x: 170, y: -70, width: 380, height: 310)), relativeCenterPosition: .zero)
     }
 
-    private func drawLandPolygons(_ polygons: [[[GeoCoordinate]]], projection: RouteFrameProjection, size: CGSize) {
-        let fill = NSBezierPath()
-        fill.windingRule = .evenOdd
-
-        for polygon in polygons {
-            for ring in polygon where ring.count >= 3 {
-                let projected = projection.projectAndClipRing(
-                    ring,
-                    to: CGRect(origin: .zero, size: size)
-                        .insetBy(dx: -2, dy: -2)
-                )
-                guard projected.count >= 3 else { continue }
-                fill.move(to: projected[0])
-                for point in projected.dropFirst() {
-                    fill.line(to: point)
-                }
-                fill.close()
-            }
-        }
-
-        NSColor(calibratedRed: 0.035, green: 0.19, blue: 0.16, alpha: 0.86).setFill()
-        fill.fill()
+    private func drawLandMask(projection: RouteFrameProjection, size: CGSize) {
+        guard let overlay = RouteFrameLandMask.projectedOverlay(
+            projection: projection,
+            size: size
+        ) else { return }
+        overlay.draw(
+            in: CGRect(origin: .zero, size: size),
+            from: .zero,
+            operation: .sourceOver,
+            fraction: 1
+        )
     }
 
     private func drawGraticule(projection: RouteFrameProjection, size: CGSize) {
@@ -317,6 +306,151 @@ struct RouteFrameMapRenderer: FlightMapRendering {
     }
 }
 
+private enum RouteFrameLandMask {
+    private static let sourceWidth = 1_024
+    private static let sourceHeight = 512
+
+    // Rasterize in ordinary longitude/latitude space once, before applying
+    // the route-centred projection. Inverse-sampling this mask avoids the
+    // polygon-complement and vertical-band artifacts caused when a very
+    // large continent crosses the rotated projection seam.
+    private static let source: [UInt8] = {
+        guard let bitmap = NSBitmapImageRep(
+            bitmapDataPlanes: nil,
+            pixelsWide: sourceWidth,
+            pixelsHigh: sourceHeight,
+            bitsPerSample: 8,
+            samplesPerPixel: 1,
+            hasAlpha: false,
+            isPlanar: false,
+            colorSpaceName: .deviceWhite,
+            bytesPerRow: sourceWidth,
+            bitsPerPixel: 8
+        ), let context = NSGraphicsContext(bitmapImageRep: bitmap) else {
+            return []
+        }
+
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = context
+        NSColor.black.setFill()
+        NSBezierPath(
+            rect: CGRect(x: 0, y: 0, width: sourceWidth, height: sourceHeight)
+        ).fill()
+
+        for polygon in NaturalEarthLand.polygons {
+            let path = NSBezierPath()
+            path.windingRule = .evenOdd
+            for ring in polygon where ring.count >= 3 {
+                let first = sourcePoint(for: ring[0])
+                path.move(to: first)
+                for coordinate in ring.dropFirst() {
+                    path.line(to: sourcePoint(for: coordinate))
+                }
+                path.close()
+            }
+            NSColor.white.setFill()
+            path.fill()
+        }
+        NSGraphicsContext.restoreGraphicsState()
+
+        guard let bitmapData = bitmap.bitmapData else { return [] }
+        return Array(
+            UnsafeBufferPointer(
+                start: bitmapData,
+                count: sourceWidth * sourceHeight
+            )
+        )
+    }()
+
+    static func projectedOverlay(
+        projection: RouteFrameProjection,
+        size: CGSize
+    ) -> NSImage? {
+        let width = max(1, Int(size.width.rounded()))
+        let height = max(1, Int(size.height.rounded()))
+        guard !source.isEmpty else { return nil }
+
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        let landRed = 0.035
+        let landGreen = 0.19
+        let landBlue = 0.16
+        let landOpacity = 0.86
+
+        for topRow in 0..<height {
+            let appKitY = CGFloat(height - 1 - topRow) + 0.5
+            for x in 0..<width {
+                let coordinate = projection.coordinate(
+                    at: CGPoint(x: CGFloat(x) + 0.5, y: appKitY)
+                )
+                let coverage = sample(
+                    latitude: coordinate.latitude,
+                    longitude: coordinate.longitude
+                )
+                let alpha = coverage * landOpacity
+                let offset = (topRow * width + x) * 4
+                pixels[offset] = UInt8((landRed * alpha * 255).rounded())
+                pixels[offset + 1] = UInt8((landGreen * alpha * 255).rounded())
+                pixels[offset + 2] = UInt8((landBlue * alpha * 255).rounded())
+                pixels[offset + 3] = UInt8((alpha * 255).rounded())
+            }
+        }
+
+        guard let provider = CGDataProvider(data: Data(pixels) as CFData),
+              let image = CGImage(
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bitsPerPixel: 32,
+                bytesPerRow: width * 4,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGBitmapInfo(
+                    rawValue: CGImageAlphaInfo.premultipliedLast.rawValue
+                ),
+                provider: provider,
+                decode: nil,
+                shouldInterpolate: true,
+                intent: .defaultIntent
+              ) else { return nil }
+        return NSImage(cgImage: image, size: size)
+    }
+
+    private static func sourcePoint(for coordinate: GeoCoordinate) -> CGPoint {
+        CGPoint(
+            x: ((coordinate.longitude + 180) / 360) *
+                Double(sourceWidth - 1),
+            y: ((coordinate.latitude + 90) / 180) *
+                Double(sourceHeight - 1)
+        )
+    }
+
+    private static func sample(latitude: Double, longitude: Double) -> Double {
+        var wrappedLongitude = longitude
+        while wrappedLongitude < -180 { wrappedLongitude += 360 }
+        while wrappedLongitude >= 180 { wrappedLongitude -= 360 }
+        let sourceX = ((wrappedLongitude + 180) / 360) *
+            Double(sourceWidth - 1)
+        // NSBitmapImageRep exposes raw rows top-to-bottom even though the
+        // AppKit context used to draw the source mask is bottom-up. Convert
+        // latitude to that raw row order here; otherwise every route samples
+        // land from the latitude mirrored across the equator (for example,
+        // LAX receives southern-hemisphere fill while Sydney receives the
+        // corresponding northern-hemisphere fill).
+        let sourceY = ((90 - max(-90, min(90, latitude))) / 180) *
+            Double(sourceHeight - 1)
+        let x0 = max(0, min(sourceWidth - 1, Int(floor(sourceX))))
+        let y0 = max(0, min(sourceHeight - 1, Int(floor(sourceY))))
+        let x1 = min(sourceWidth - 1, x0 + 1)
+        let y1 = min(sourceHeight - 1, y0 + 1)
+        let fx = sourceX - Double(x0)
+        let fy = sourceY - Double(y0)
+        let top = Double(source[y0 * sourceWidth + x0]) * (1 - fx) +
+            Double(source[y0 * sourceWidth + x1]) * fx
+        let bottom = Double(source[y1 * sourceWidth + x0]) * (1 - fx) +
+            Double(source[y1 * sourceWidth + x1]) * fx
+        return (top * (1 - fy) + bottom * fy) / 255
+    }
+}
+
 private struct RouteFrameProjection {
     let size: CGSize
     let originPoint: CGPoint
@@ -338,8 +472,17 @@ private struct RouteFrameProjection {
 
     init(origin: CLLocationCoordinate2D, destination: CLLocationCoordinate2D, size: CGSize) {
         self.size = size
-        self.originPoint = CGPoint(x: size.width * 0.50, y: size.height * 0.155)
-        self.destinationPoint = CGPoint(x: size.width * 0.50, y: size.height * 0.845)
+        // The firmware's straight-route overlay anchors the departure and
+        // arrival dots at screen y=370 and y=96. AppKit map coordinates are
+        // bottom-up, so use the same 96/370 positions here. The projection
+        // still extends beyond both anchors, retaining geographic context
+        // without moving the map out from under the route overlay.
+        let endpointInset = size.height * (96.0 / 466.0)
+        self.originPoint = CGPoint(x: size.width * 0.50, y: endpointInset)
+        self.destinationPoint = CGPoint(
+            x: size.width * 0.50,
+            y: size.height - endpointInset
+        )
 
         let originVector = Vector3(coordinate: origin)
         let destinationVector = Vector3(coordinate: destination)
@@ -381,45 +524,29 @@ private struct RouteFrameProjection {
         )
     }
 
-    func projectAndClipRing(
-        _ coordinates: [GeoCoordinate],
-        to rect: CGRect
-    ) -> [CGPoint] {
-        guard coordinates.count >= 3 else { return [] }
-
-        var samples: [(along: Double, crossTrack: Double)] = []
-        samples.reserveCapacity(coordinates.count)
-        var previousAlong: Double?
-        for coordinate in coordinates {
-            var component = projectionComponents(coordinate)
-            if let previousAlong {
-                while component.along - previousAlong > .pi {
-                    component.along -= 2 * .pi
-                }
-                while component.along - previousAlong < -.pi {
-                    component.along += 2 * .pi
-                }
-            }
-            samples.append(component)
-            previousAlong = component.along
-        }
-
-        // Shift an antimeridian-unwrapped polygon to the copy closest to the
-        // route corridor. This keeps Alaska/Russia and other seam-crossing
-        // land masses continuous without drawing a false chord over the map.
-        let meanAlong = samples.reduce(0) { $0 + $1.along } /
-            Double(samples.count)
-        let corridorCenter = totalAngle * 0.5
-        let wrap = round(
-            (corridorCenter - meanAlong) / (2 * .pi)
-        ) * (2 * .pi)
-        let points = samples.map {
-            screenPoint(
-                along: $0.along + wrap,
-                crossTrack: $0.crossTrack
-            )
-        }
-        return Self.clipPolygon(points, to: rect)
+    func coordinate(at point: CGPoint) -> GeoCoordinate {
+        let span = destinationPoint.y - originPoint.y
+        let along = ((point.y - originPoint.y) / span) * totalAngle
+        let crossTrack = ((size.width * 0.50 - point.x) /
+            (size.width * 0.43)) * crossTrackHalfAngle
+        let crossCosine = cos(crossTrack)
+        let alongCosine = cos(along)
+        let alongSine = sin(along)
+        let vector = Vector3(
+            x: originVector.x * crossCosine * alongCosine +
+                alongVector.x * crossCosine * alongSine +
+                normalVector.x * sin(crossTrack),
+            y: originVector.y * crossCosine * alongCosine +
+                alongVector.y * crossCosine * alongSine +
+                normalVector.y * sin(crossTrack),
+            z: originVector.z * crossCosine * alongCosine +
+                alongVector.z * crossCosine * alongSine +
+                normalVector.z * sin(crossTrack)
+        ).normalized
+        return GeoCoordinate(
+            latitude: asin(max(-1, min(1, vector.z))).radiansToDegrees,
+            longitude: atan2(vector.y, vector.x).radiansToDegrees
+        )
     }
 
     private func projectionComponents(
@@ -455,65 +582,6 @@ private struct RouteFrameProjection {
         )
     }
 
-    private static func clipPolygon(
-        _ polygon: [CGPoint],
-        to rect: CGRect
-    ) -> [CGPoint] {
-        enum Edge {
-            case left, right, bottom, top
-        }
-        func inside(_ point: CGPoint, edge: Edge) -> Bool {
-            switch edge {
-            case .left: return point.x >= rect.minX
-            case .right: return point.x <= rect.maxX
-            case .bottom: return point.y >= rect.minY
-            case .top: return point.y <= rect.maxY
-            }
-        }
-        func intersection(
-            _ start: CGPoint,
-            _ end: CGPoint,
-            edge: Edge
-        ) -> CGPoint {
-            let dx = end.x - start.x
-            let dy = end.y - start.y
-            switch edge {
-            case .left, .right:
-                let x = edge == .left ? rect.minX : rect.maxX
-                let t = abs(dx) < 0.000_001 ? 0 : (x - start.x) / dx
-                return CGPoint(x: x, y: start.y + t * dy)
-            case .bottom, .top:
-                let y = edge == .bottom ? rect.minY : rect.maxY
-                let t = abs(dy) < 0.000_001 ? 0 : (y - start.y) / dy
-                return CGPoint(x: start.x + t * dx, y: y)
-            }
-        }
-
-        var output = polygon
-        for edge in [Edge.left, .right, .bottom, .top] {
-            let input = output
-            output.removeAll(keepingCapacity: true)
-            guard var start = input.last else { break }
-            for end in input {
-                let startInside = inside(start, edge: edge)
-                let endInside = inside(end, edge: edge)
-                if endInside {
-                    if !startInside {
-                        output.append(
-                            intersection(start, end, edge: edge)
-                        )
-                    }
-                    output.append(end)
-                } else if startInside {
-                    output.append(
-                        intersection(start, end, edge: edge)
-                    )
-                }
-                start = end
-            }
-        }
-        return output
-    }
 }
 
 enum NaturalEarthLand {

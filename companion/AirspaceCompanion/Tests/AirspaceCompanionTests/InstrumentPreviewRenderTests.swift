@@ -49,12 +49,29 @@ final class InstrumentPreviewRenderTests: XCTestCase {
             countryCode: "GB",
             timeZoneIdentifier: "Europe/London"
         )
+        let lax = Airport(
+            code: "LAX",
+            name: "Los Angeles International",
+            city: "Los Angeles",
+            coordinate: .init(latitude: 33.9416, longitude: -118.4085),
+            countryCode: "US",
+            timeZoneIdentifier: "America/Los_Angeles"
+        )
+        let syd = Airport(
+            code: "SYD",
+            name: "Sydney Kingsford Smith",
+            city: "Sydney",
+            coordinate: .init(latitude: -33.9399, longitude: 151.1753),
+            countryCode: "AU",
+            timeZoneIdentifier: "Australia/Sydney"
+        )
         let cases = [
             ("SJC-SAN", sjc, san, 0.5),
             ("PDX-SAN", pdx, san, 0.76),
             ("SFO-JFK", Airport.sfo, jfk, 0.5),
             ("SFO-LHR", Airport.sfo, lhr, 0.5),
             ("ICN-SFO", Airport.icn, Airport.sfo, 0.5),
+            ("LAX-SYD", lax, syd, 0.5),
         ]
         let outputDirectory = URL(
             fileURLWithPath: "/private/tmp/airspace-route-frame-cases",
