@@ -1889,6 +1889,19 @@ static airlabs_enrich_result_t fetch_airlabs_selected_aircraft(
     }
     entry->airlabs_query_succeeded = true;
     const cJSON *flights = cJSON_IsArray(root) ? root : object_item(root, "response");
+    if (!cJSON_IsArray(flights) || cJSON_GetArraySize(flights) == 0) {
+        /* An empty AirLabs response is absence of enrichment, not evidence that
+         * the ICAO24-validated ADSBDB route belongs to another aircraft.  Keep
+         * that route and retry AirLabs on the normal failure interval. */
+        entry->airlabs_query_succeeded = false;
+        cJSON_Delete(root);
+        ESP_LOGI(TAG,
+                 "AirLabs returned no rows for selected aircraft %s/%s; "
+                 "keeping existing route",
+                 aircraft->icao24,
+                 aircraft->callsign);
+        return AIRLABS_ENRICH_UNAVAILABLE;
+    }
     const cJSON *best = NULL;
     int best_score = 0;
     float best_difference = INFINITY;
