@@ -151,6 +151,12 @@ PLIST
 # private key is accessed, so rebuilding cannot trigger authorization dialogs.
 find "$APP_PATH" -name '.DS_Store' -type f -delete
 find "$APP_PATH" -name '._*' -type f -delete
+if [[ "$BUILD_CONFIG" == "release" ]]; then
+  # Swift and native symbol tables retain absolute source paths. They are not
+  # needed by the distributable app and must not expose the build machine.
+  strip -S "$MACOS_PATH/AirESP32ace"
+  strip -S "$FRAMEWORKS_PATH/libAirspaceRenderer.dylib"
+fi
 codesign --force --sign - \
   --identifier "$RENDERER_ID" \
   --timestamp=none \
