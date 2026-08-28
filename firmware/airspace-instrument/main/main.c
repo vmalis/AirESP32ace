@@ -6895,10 +6895,14 @@ typedef struct {
 
 #define TRACKED_POST_ARRIVAL_RETENTION_SECONDS (2 * 60 * 60)
 #define TRACKED_ENDPOINT_ARRIVAL_GRACE_SECONDS (30 * 60)
+#define TRACKED_UNCONFIRMED_ARRIVAL_TIMEOUT_SECONDS (24 * 60 * 60)
 
 /* Free-tier schedule records occasionally retain an airborne status after the
  * final live occurrence has disappeared. Keep the device-side inference
- * conservative; provider-backed terminal validation is handled upstream. */
+ * conservative; provider-backed terminal validation is handled upstream.
+ * A persisted occurrence that is still fractional a full day after its ETA
+ * is nevertheless stale, which prevents an offline device from restoring the
+ * same old flight forever after SNTP supplies the current time. */
 static bool tracked_is_terminal(
     const app_remote_status_t *remote,
     int64_t now)
@@ -6935,8 +6939,12 @@ static bool tracked_is_terminal(
     if (!occurrence_started || eta <= 0) {
         return false;
     }
-    return remote->route_progress >= 0.995f &&
+    const bool reached_endpoint =
+        remote->route_progress >= 0.995f &&
         now >= eta + TRACKED_ENDPOINT_ARRIVAL_GRACE_SECONDS;
+    const bool exceeded_stale_timeout =
+        now >= eta + TRACKED_UNCONFIRMED_ARRIVAL_TIMEOUT_SECONDS;
+    return reached_endpoint || exceeded_stale_timeout;
 }
 
 static int64_t tracked_terminal_reference_time(

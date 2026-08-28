@@ -661,8 +661,8 @@ enum NaturalEarthLand {
     private static func candidateURLs() -> [URL] {
         var urls: [URL] = []
         urls.append(contentsOf: [
-            Bundle.module.url(forResource: "ne_50m_land", withExtension: "geojson"),
-            Bundle.module.url(forResource: "ne_110m_land", withExtension: "geojson")
+            AppResources.bundle.url(forResource: "ne_50m_land", withExtension: "geojson"),
+            AppResources.bundle.url(forResource: "ne_110m_land", withExtension: "geojson")
         ].compactMap { $0 })
 
         let current = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)

@@ -52,6 +52,34 @@ final class PlannedFlightPriorityTests: XCTestCase {
         )
     }
 
+    func testDaysOldUnfinishedFlightCannotBlockNextFlight() {
+        let now = Date(timeIntervalSince1970: 2_000_000)
+        var staleActive = plan(
+            "WN2622",
+            departure: now.addingTimeInterval(-5 * 24 * 3600),
+            arrival: now.addingTimeInterval(-4 * 24 * 3600)
+        )
+        staleActive.actualDeparture = staleActive.scheduledDeparture
+        staleActive.statusSummary = "En route · 51%"
+        let next = plan(
+            "UA858",
+            departure: now.addingTimeInterval(2 * 3600),
+            arrival: now.addingTimeInterval(12 * 3600)
+        )
+
+        XCTAssertTrue(
+            staleActive.hasExceededUnconfirmedArrivalWindow(at: now)
+        )
+        XCTAssertEqual(
+            PlannedFlightPriority.select(
+                from: [staleActive, next],
+                currentPlanID: staleActive.id,
+                at: now
+            )?.id,
+            next.id
+        )
+    }
+
     func testOldestUnderwayFlightWinsWithoutSavedSelection() {
         let now = Date(timeIntervalSince1970: 2_000_000)
         let first = plan(
@@ -225,6 +253,24 @@ final class PlannedFlightPriorityTests: XCTestCase {
 
         XCTAssertEqual(recent.journeyPhase(at: now), "enroute")
         XCTAssertEqual(partial.journeyPhase(at: now), "enroute")
+    }
+
+    func testDaysOldPartialRouteIsReconciledAndExpired() {
+        let now = Date(timeIntervalSince1970: 2_000_000)
+        let eta = now.addingTimeInterval(-4 * 24 * 3600)
+        let stale = trackedFlight(
+            status: "En route · 51%",
+            progress: 0.51,
+            departure: now.addingTimeInterval(-5 * 24 * 3600),
+            arrival: eta
+        )
+
+        XCTAssertEqual(stale.journeyPhase(at: now), "arrived")
+        let reconciled = stale.reconciledTerminalState(at: now)
+        XCTAssertEqual(reconciled.routeProgress, 1)
+        XCTAssertEqual(reconciled.actualArrival, eta)
+        XCTAssertEqual(reconciled.verticalPhase, "landed")
+        XCTAssertTrue(reconciled.isExpiredAfterArrival(at: now))
     }
 
     func testScheduleRejectsOverlappingFlight() {

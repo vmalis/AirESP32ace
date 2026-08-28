@@ -655,7 +655,7 @@ private struct GearAssetGlyph: View {
     let color: Color
 
     private static let artwork: NSImage? = {
-        guard let url = Bundle.module.url(
+        guard let url = AppResources.bundle.url(
             forResource: "gear_sidebar",
             withExtension: "png"
         ) else { return nil }
@@ -698,7 +698,7 @@ private struct SputnikGlyph: View {
     let color: Color
 
     private static let bundledImage: NSImage? = {
-        guard let url = Bundle.module.url(
+        guard let url = AppResources.bundle.url(
             forResource: "sputnik_launch",
             withExtension: "png"
         ) else {

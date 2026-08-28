@@ -1018,7 +1018,7 @@ private struct SetupDeviceArtwork: View {
 private struct PremiumUSBCableArtwork: View {
     let connectorWidth: CGFloat
 
-    private static let image: NSImage? = Bundle.module.url(
+    private static let image: NSImage? = AppResources.bundle.url(
         forResource: "usb_c_cable_premium",
         withExtension: "png"
     ).flatMap(NSImage.init(contentsOf:))
@@ -1691,7 +1691,7 @@ enum DeviceFirmwareResources {
                     .appendingPathComponent("device-clean.png")
             )
         }
-        if let resources = Bundle.module.resourceURL {
+        if let resources = AppResources.bundle.resourceURL {
             result.append(resources.appendingPathComponent("device-clean.png"))
         }
         if let root = repositoryRoot {

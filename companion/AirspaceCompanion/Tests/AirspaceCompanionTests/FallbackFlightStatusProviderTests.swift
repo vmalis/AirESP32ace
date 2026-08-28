@@ -23,7 +23,8 @@ final class FallbackFlightStatusProviderTests: XCTestCase {
     func testSuccessfulFlightAwareDoesNotCallAirLabsFallback() async throws {
         let provider = FallbackFlightStatusProvider(
             primary: MissingTelemetryFlightProvider(),
-            fallback: UnexpectedFallbackFlightProvider()
+            fallback: UnexpectedFallbackFlightProvider(),
+            now: { Date(timeIntervalSince1970: 1_320) }
         )
 
         let result = try await provider.trackedFlight(

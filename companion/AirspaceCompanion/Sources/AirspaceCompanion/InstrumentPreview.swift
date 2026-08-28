@@ -2619,7 +2619,7 @@ private func spaceResourceImage(
     named name: String
 ) -> NSImage? {
     guard
-        let url = Bundle.module.url(
+        let url = AppResources.bundle.url(
             forResource: name,
             withExtension: "png"
         )

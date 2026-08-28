@@ -150,6 +150,7 @@ struct TrackedFlight: Identifiable, Hashable, Codable {
 extension TrackedFlight {
     static let postArrivalRetentionInterval: TimeInterval = 2 * 3600
     static let endpointArrivalGraceInterval: TimeInterval = 30 * 60
+    static let unconfirmedArrivalTimeoutInterval: TimeInterval = 24 * 3600
 
     /// The tracker remains available briefly after touchdown so the landed
     /// state can still be reviewed. Prefer the provider's actual arrival and
@@ -174,6 +175,10 @@ extension TrackedFlight {
     /// grace period.  This deliberately does not trust the status string or
     /// schedule clock alone, which protects delayed flights. Provider-backed
     /// terminal validation handles flights whose final position was missed.
+    /// As a final offline/restart safeguard, an occurrence more than 24 hours
+    /// beyond its ETA is terminal even if its last persisted route sample was
+    /// fractional. This prevents a days-old snapshot from owning the Tracker
+    /// forever while leaving a full day for exceptional operational delays.
     func hasInferredTerminalState(
         at now: Date,
         gracePeriod: TimeInterval = Self.endpointArrivalGraceInterval
@@ -193,8 +198,10 @@ extension TrackedFlight {
             normalizedStatus.contains("airborne")
         guard occurrenceStarted else { return false }
 
-        return (routeProgress ?? 0) >= 0.995 &&
-            now.timeIntervalSince(expectedArrival) >= gracePeriod
+        let timeSinceArrival = now.timeIntervalSince(expectedArrival)
+        return ((routeProgress ?? 0) >= 0.995 &&
+            timeSinceArrival >= gracePeriod) ||
+            timeSinceArrival >= Self.unconfirmedArrivalTimeoutInterval
     }
 
     /// Reconciles the inferred phase into concrete values before the flight is
@@ -258,6 +265,7 @@ extension TrackedFlight {
 
 struct PlannedFlight: Codable, Identifiable, Hashable {
     static let postArrivalRetentionInterval: TimeInterval = 2 * 3600
+    static let unconfirmedArrivalTimeoutInterval: TimeInterval = 24 * 3600
 
     let id: UUID
     var flightNumber: String
@@ -391,6 +399,20 @@ struct PlannedFlight: Codable, Identifiable, Hashable {
                 Self.postArrivalRetentionInterval
             )
     }
+
+    /// A provider or device can retain an unfinished in-flight snapshot when
+    /// it remains offline through landing. Do not let that snapshot block the
+    /// rest of the queue indefinitely after a later app restart.
+    func hasExceededUnconfirmedArrivalWindow(
+        at now: Date = Date()
+    ) -> Bool {
+        guard !isTerminal,
+              actualDeparture != nil || effectiveDeparture <= now
+        else { return false }
+        return now >= effectiveArrival.addingTimeInterval(
+            Self.unconfirmedArrivalTimeoutInterval
+        )
+    }
 }
 
 enum PlannedFlightPriority {
@@ -399,7 +421,10 @@ enum PlannedFlightPriority {
         currentPlanID: UUID? = nil,
         at now: Date = Date()
     ) -> PlannedFlight? {
-        let available = plans.filter { !$0.isTerminal }
+        let available = plans.filter {
+            !$0.isTerminal &&
+                !$0.hasExceededUnconfirmedArrivalWindow(at: now)
+        }
         let retainedArrivals = plans.filter {
             $0.hasArrived && $0.isWithinPostArrivalRetention(at: now)
         }
@@ -409,9 +434,10 @@ enum PlannedFlightPriority {
             return landed
         }
 
-        // Once a flight owns the tracker it stays there until a provider
-        // explicitly reports a terminal state. Schedule estimates must never
-        // make a newer departure steal an aircraft that may still be airborne.
+        // Within the conservative stale-occurrence window, a flight keeps the
+        // tracker until a provider explicitly reports a terminal state.
+        // Schedule estimates must never make a newer departure steal an
+        // aircraft that may still be airborne.
         if let currentPlanID,
            let current = available.first(where: { $0.id == currentPlanID }),
            current.actualDeparture != nil || current.effectiveDeparture <= now {

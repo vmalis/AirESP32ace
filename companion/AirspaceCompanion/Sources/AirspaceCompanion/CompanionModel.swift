@@ -1341,7 +1341,10 @@ final class CompanionModel: ObservableObject {
         let now = Date()
         let expiredIDs = Set(
             flightPlans
-                .filter { $0.isExpiredAfterArrival(at: now) }
+                .filter {
+                    $0.isExpiredAfterArrival(at: now) ||
+                        $0.hasExceededUnconfirmedArrivalWindow(at: now)
+                }
                 .map(\.id)
         )
         if !expiredIDs.isEmpty {

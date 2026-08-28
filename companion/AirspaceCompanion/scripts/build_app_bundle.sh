@@ -8,7 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PACKAGE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 REPOSITORY_DIR="$(cd "$PACKAGE_DIR/../.." && pwd)"
 APP_NAME="AirESP32ace"
-FIRMWARE_RELEASE_NAME="AirESP32ace_090826_v01.bin"
+FIRMWARE_RELEASE_NAME="AirESP32ace_280826_v01.bin"
 BUNDLE_ID="com.vadimmalis.airspace-companion"
 RENDERER_ID="$BUNDLE_ID.renderer"
 BUILD_CONFIG="${1:-debug}"
@@ -63,10 +63,16 @@ mkdir -p "$MACOS_PATH" "$RESOURCES_PATH" "$FRAMEWORKS_PATH"
 cp "$BINARY_PATH" "$MACOS_PATH/AirESP32ace"
 chmod +x "$MACOS_PATH/AirESP32ace"
 
-RESOURCE_BUNDLE="$PRODUCT_DIR/AirspaceCompanion_AirspaceCompanion.bundle"
-if [[ -d "$RESOURCE_BUNDLE" ]]; then
-  cp -R "$RESOURCE_BUNDLE" "$RESOURCES_PATH/"
+RESOURCE_BUNDLE_NAME="${APP_NAME}_AirspaceCompanion.bundle"
+RESOURCE_BUNDLE="$PRODUCT_DIR/$RESOURCE_BUNDLE_NAME"
+if [[ ! -d "$RESOURCE_BUNDLE" ]]; then
+  echo "error: SwiftPM resource bundle is missing: $RESOURCE_BUNDLE" >&2
+  exit 1
 fi
+
+# Keep nested resources in the standard macOS location. AppResources resolves
+# this packaged location before using SwiftPM's build-directory fallback.
+cp -R "$RESOURCE_BUNDLE" "$RESOURCES_PATH/"
 
 cp \
   "$NATIVE_BUILD_DIR/libAirspaceRenderer.dylib" \

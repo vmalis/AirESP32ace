@@ -26,7 +26,7 @@ enum APIProviderArtwork: String, CaseIterable {
     }
 
     var image: NSImage? {
-        guard let url = Bundle.module.url(forResource: rawValue, withExtension: "png") else {
+        guard let url = AppResources.bundle.url(forResource: rawValue, withExtension: "png") else {
             return nil
         }
         return NSImage(contentsOf: url)

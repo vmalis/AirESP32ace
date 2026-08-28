@@ -15,7 +15,7 @@ enum ProjectAssetCatalog {
             )
         }
         let name = agency == .nasa ? "iss_nasa" : "iss_roscosmos"
-        guard let url = Bundle.module.url(
+        guard let url = AppResources.bundle.url(
             forResource: name,
             withExtension: "png"
         ) else {
