@@ -8,7 +8,7 @@ These binaries target the **Waveshare ESP32-S3-Touch-AMOLED-1.75C** with 32 MB f
 |---:|---|---|
 | `0x0000` | `bootloader.bin` | ESP32-S3 bootloader |
 | `0x8000` | `partition-table.bin` | AirESP32ace partition layout |
-| `0x10000` | `AirESP32ace_090826_v01.bin` | Main application |
+| `0x10000` | `AirESP32ace_280826_v01.bin` | Main application |
 
 ## First installation
 
@@ -26,7 +26,7 @@ esptool.py --chip esp32s3 \
   --flash_size 32MB \
   0x0000 bootloader.bin \
   0x8000 partition-table.bin \
-  0x10000 AirESP32ace_090826_v01.bin
+  0x10000 AirESP32ace_280826_v01.bin
 ```
 
 If automatic download mode fails, hold the lower BOOT button while starting the flash, then release it once the serial connection begins.
@@ -37,7 +37,7 @@ When the bootloader and partition table are already installed, only the applicat
 
 ```bash
 esptool.py --chip esp32s3 --port /dev/cu.usbmodemXXXX \
-  write_flash 0x10000 AirESP32ace_090826_v01.bin
+  write_flash 0x10000 AirESP32ace_280826_v01.bin
 ```
 
 The companion's firmware panel can perform the same application update after it confirms the connected USB device.
