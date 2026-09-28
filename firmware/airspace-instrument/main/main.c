@@ -4034,6 +4034,15 @@ static void tracked_attach_aircraft_identity(
     lv_label_set_long_mode(
         flight_label,
         LV_LABEL_LONG_CLIP);
+    if (strstr(remote->tracked_flight_status, "estimated") != NULL) {
+        lv_obj_t *estimated = label_box(aircraft_holder, "EST. POS.",
+            &lv_font_montserrat_12, lv_color_hex(0x9aa49e),
+            LV_ALIGN_TOP_LEFT, 0, 0, tag_width);
+        lv_obj_set_pos(estimated, tag_x, 53);
+        lv_obj_set_style_text_align(estimated, LV_TEXT_ALIGN_CENTER, 0);
+        lv_obj_set_style_text_letter_space(estimated, 0, 0);
+        lv_label_set_long_mode(estimated, LV_LABEL_LONG_CLIP);
+    }
 }
 
 static const uint8_t *prepare_padded_map_tiles(uint8_t map_kind, size_t map_len, const uint8_t *map, uint32_t revision)
@@ -7629,6 +7638,14 @@ static void tracked_draw_globe_panels(const app_remote_status_t *remote,
         flight_number,
         LV_TEXT_ALIGN_CENTER,
         0);
+
+    if (strstr(remote->tracked_flight_status, "estimated") != NULL) {
+        lv_obj_t *estimated = label_box(tracked_panel_primary, "ESTIMATED POSITION",
+            &lv_font_montserrat_12, lv_color_hex(0x9aa49e),
+            LV_ALIGN_TOP_LEFT, 0, 0, 180);
+        lv_obj_set_pos(estimated, CX - 90, 78);
+        lv_obj_set_style_text_align(estimated, LV_TEXT_ALIGN_CENTER, 0);
+    }
 
     tracked_draw_divider(
         tracked_panel_secondary,
@@ -13916,11 +13933,8 @@ static void reset_space_map_overlay_references(void)
     }
 }
 
-static void render_space_map_overlay(lv_obj_t *map)
+static void trim_space_map_asset_cache(void)
 {
-    if (map == NULL) {
-        return;
-    }
     app_config_t cfg;
     app_config_get(&cfg);
     static const char *const iss_assets[] = {
@@ -13954,6 +13968,16 @@ static void render_space_map_overlay(lv_obj_t *map)
                 : sizeof(iss_assets_without_flags) /
                     sizeof(iss_assets_without_flags[0]));
     }
+}
+
+static void render_space_map_overlay(lv_obj_t *map)
+{
+    if (map == NULL) {
+        return;
+    }
+    app_config_t cfg;
+    app_config_get(&cfg);
+    trim_space_map_asset_cache();
     const eclipse_definition_t *eclipse = NULL;
     if (space_eclipse_visible) {
         eclipse = next_total_eclipse();
@@ -14140,6 +14164,9 @@ static void render_space_map_overlay(lv_obj_t *map)
 static void render_iss_globe(void)
 {
     draw_shell();
+    /* The previous object tree is gone. Reclaim Moon/launch artwork before
+     * allocating the full-screen world, not later in the overlay pass. */
+    trim_space_map_asset_cache();
     lv_obj_t *world_image = draw_space_asset(
         SPACE_ASSET_WORLD,
         "world",
@@ -16218,14 +16245,6 @@ static void render_launch_qr(void)
             ? 28
             : 34,
         220);
-    launch_draw_centered_text(
-        screen_root,
-        remote->launch_mission,
-        &lv_font_montserrat_18,
-        lv_color_hex(0xf0f4f2),
-        69,
-        390);
-
 #if LV_USE_QRCODE
     if (remote->launch_watch_url[0] != '\0') {
         lv_obj_t *qr = lv_qrcode_create(screen_root);
@@ -20948,11 +20967,13 @@ static void render_tracked_flight_detail(void)
         268,
         220);
     if (tracked_detail_aux_visible) {
+        char identity_status[48];
+        snprintf(identity_status, sizeof(identity_status), "%s%s",
+            remote.tracked_flight_callsign[0] ? remote.tracked_flight_callsign : "-",
+            strstr(remote.tracked_flight_status, "estimated") ? " - ESTIMATED" : "");
         detail_centered_label(
             screen_root,
-            remote.tracked_flight_callsign[0] != '\0'
-                ? remote.tracked_flight_callsign
-                : "-",
+            identity_status,
             &lv_font_montserrat_12,
             lv_color_hex(0x77817b),
             123,
@@ -21223,6 +21244,26 @@ static void prepare_generated_scene(void)
      */
     lv_obj_clean(lv_screen_active());
     release_inactive_generated_artwork(target);
+
+    /* Radar/Tracker/weather tiles are not used by generated scenes. Holding
+     * their aligned full-screen copy here can starve ISS artwork while the
+     * weather worker replaces its cached radar pack. Drop descriptors only
+     * after the old object tree is gone; the next map render rebuilds them. */
+    if (target != GENERATED_SCENE_NONE && padded_map_buffer != NULL) {
+        for (int tile = 0; tile < MAP_TILE_COUNT; tile++) {
+            lv_image_cache_drop(&pushed_map_tiles[tile]);
+            memset(&pushed_map_tiles[tile], 0, sizeof(pushed_map_tiles[tile]));
+            pushed_map_tile_objects[tile] = NULL;
+        }
+        heap_caps_free(padded_map_buffer);
+        padded_map_buffer = NULL;
+        padded_map_revision_seen = UINT32_MAX;
+        padded_map_kind_seen = UINT8_MAX;
+        weather_composite_overlay_revision_seen = UINT32_MAX;
+        weather_composite_map_revision_seen = UINT32_MAX;
+        weather_composite_map_index_seen = -1;
+        weather_composite_frame_index_seen = -1;
+    }
 
     /*
      * These two scenes create a full-screen snapshot before draw_shell() has

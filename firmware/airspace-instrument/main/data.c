@@ -2,6 +2,8 @@
 // Created by VM, August 2026
 
 #include "data.h"
+#include "tracker.h"
+#include "launches.h"
 
 #include <ctype.h>
 #include <dirent.h>
@@ -2468,6 +2470,35 @@ static const char *opensky_bearer_token_if_available(const app_config_t *cfg)
     return refresh_opensky_token(cfg) ? opensky_access_token : NULL;
 }
 
+cJSON *app_data_tracker_opensky(const char *query, int *code)
+{
+    *code = 0;
+    if (time(NULL) < opensky_rate_limited_until_unix) {
+        *code = 429;
+        return NULL;
+    }
+    app_config_t cfg;
+    app_config_get(&cfg);
+    char url[320];
+    snprintf(url, sizeof(url), "https://opensky-network.org/api/states/all?%s", query);
+    const char *token = opensky_bearer_token_if_available(&cfg);
+    char *body = http_get_bearer(url, token, FETCH_AIRCRAFT_MAX, code);
+    if (*code == 401) {
+        heap_caps_free(body);
+        opensky_access_token[0] = '\0';
+        opensky_token_expires_unix = 0;
+        token = opensky_bearer_token_if_available(&cfg);
+        body = token ? http_get_bearer(url, token, FETCH_AIRCRAFT_MAX, code) : NULL;
+    }
+    if (*code == 429) {
+        opensky_rate_limited_until_unix = time(NULL) + AIRCRAFT_RATE_LIMIT_RETRY_MS / 1000;
+        opensky_rate_limit_was_authenticated = token != NULL;
+    }
+    cJSON *root = body && *code == 200 ? cJSON_Parse(body) : NULL;
+    heap_caps_free(body);
+    return root;
+}
+
 typedef enum {
     API_HEALTH_PROVIDER_FLIGHTAWARE = 0,
     API_HEALTH_PROVIDER_OPENSKY,
@@ -2539,11 +2570,11 @@ static void validate_api_credentials(void)
     app_config_t cfg;
     app_config_get(&cfg);
 
-    /* FlightAware remains Mac-only.  The companion pushes this bit only
-     * after its no-cost /alerts authorization probe succeeds. */
+    /* Validate the provisioned key on the device using the same no-cost
+     * authorization probe as the companion. */
     publish_api_health(
         API_HEALTH_PROVIDER_FLIGHTAWARE,
-        cfg.flightaware_available
+        app_tracker_validate_flightaware()
             ? APP_API_HEALTH_VALID
             : APP_API_HEALTH_INVALID);
 
@@ -4158,7 +4189,9 @@ static void data_task(void *arg)
         }
         app_network_status_t net;
         app_network_get_status(&net);
+        app_launches_tick(net.wifi_connected && net.time_synced);
         if (net.wifi_connected && net.time_synced) {
+            app_tracker_tick();
             const bool full_requested = full_refresh_requested;
             const bool aircraft_requested = aircraft_refresh_requested;
             const bool api_requested = api_validation_requested;
@@ -4204,6 +4237,9 @@ static void data_task(void *arg)
             const TickType_t minimum_wait = pdMS_TO_TICKS(250);
             if (wait_ticks < minimum_wait) {
                 wait_ticks = minimum_wait;
+            }
+            if (wait_ticks > pdMS_TO_TICKS(5000)) {
+                wait_ticks = pdMS_TO_TICKS(5000);
             }
             ulTaskNotifyTake(pdTRUE, wait_ticks);
         } else {

@@ -8,10 +8,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PACKAGE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 REPOSITORY_DIR="$(cd "$PACKAGE_DIR/../.." && pwd)"
 APP_NAME="AirESP32ace"
-FIRMWARE_RELEASE_NAME="AirESP32ace_280826_v01.bin"
+FIRMWARE_RELEASE_NAME="AirESP32ace_280926_v01.bin"
 BUNDLE_ID="com.vadimmalis.airspace-companion"
 RENDERER_ID="$BUNDLE_ID.renderer"
 BUILD_CONFIG="${1:-debug}"
+BUILD_DEVELOPER_DIR="${DEVELOPER_DIR:-$(/usr/bin/xcode-select -p)}"
+BUILD_SWIFT="$(DEVELOPER_DIR="$BUILD_DEVELOPER_DIR" /usr/bin/xcrun --find swift)"
+BUILD_SDK="$(DEVELOPER_DIR="$BUILD_DEVELOPER_DIR" /usr/bin/xcrun --sdk macosx --show-sdk-path)"
 NATIVE_BUILD_TYPE="Debug"
 if [[ "$BUILD_CONFIG" == "release" ]]; then
   NATIVE_BUILD_TYPE="Release"
@@ -28,7 +31,10 @@ cd "$PACKAGE_DIR"
 cmake \
   -S "$NATIVE_SOURCE_DIR" \
   -B "$NATIVE_BUILD_DIR" \
-  -DCMAKE_BUILD_TYPE="$NATIVE_BUILD_TYPE"
+  -DCMAKE_BUILD_TYPE="$NATIVE_BUILD_TYPE" \
+  -DCMAKE_OSX_SYSROOT="$BUILD_SDK" \
+  -DCMAKE_C_COMPILER="$(DEVELOPER_DIR="$BUILD_DEVELOPER_DIR" /usr/bin/xcrun --find clang)" \
+  -DCMAKE_CXX_COMPILER="$(DEVELOPER_DIR="$BUILD_DEVELOPER_DIR" /usr/bin/xcrun --find clang++)"
 cmake --build "$NATIVE_BUILD_DIR" --parallel
 
 SWIFT_BUILD_ARGS=(
@@ -39,10 +45,10 @@ SWIFT_BUILD_ARGS=(
 if [[ -n "$SWIFT_SCRATCH_PATH" ]]; then
   SWIFT_BUILD_ARGS+=(--scratch-path "$SWIFT_SCRATCH_PATH")
 fi
-env DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
+env DEVELOPER_DIR="$BUILD_DEVELOPER_DIR" \
   CLANG_MODULE_CACHE_PATH=/tmp/airspace_swift_module_cache \
   SWIFTPM_MODULECACHE_OVERRIDE=/tmp/airspace_swiftpm_module_cache \
-  /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift \
+  "$BUILD_SWIFT" \
   "${SWIFT_BUILD_ARGS[@]}"
 
 BINARY_DIR=".build/arm64-apple-macosx/$BUILD_CONFIG"
@@ -101,7 +107,7 @@ else
   echo "warning: firmware build outputs are missing; the in-app installer will be unavailable"
 fi
 
-NVS_GENERATOR="$REPOSITORY_DIR/tools/esp-idf/components/nvs_flash/nvs_partition_generator/nvs_partition_gen.py"
+NVS_GENERATOR="${IDF_PATH:-$REPOSITORY_DIR/tools/esp-idf}/components/nvs_flash/nvs_partition_generator/nvs_partition_gen.py"
 if [[ -f "$NVS_GENERATOR" ]]; then
   mkdir -p "$RESOURCES_PATH/FirmwareTools"
   cp "$NVS_GENERATOR" "$RESOURCES_PATH/FirmwareTools/nvs_partition_gen.py"
@@ -134,15 +140,31 @@ cat > "$CONTENTS_PATH/Info.plist" <<PLIST
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
-  <string>0.1</string>
+  <string>0.1.2</string>
   <key>CFBundleVersion</key>
-  <string>1</string>
+  <string>3</string>
   <key>LSMinimumSystemVersion</key>
-  <string>14.0</string>
+  <string>15.0</string>
   <key>LSApplicationCategoryType</key>
   <string>public.app-category.utilities</string>
   <key>NSHighResolutionCapable</key>
   <true/>
+  <key>NSLocalNetworkUsageDescription</key>
+  <string>AirESP32ace connects to your paired instrument over Wi-Fi to sync flights, maps, and settings and read its live status.</string>
+  <key>NSAppTransportSecurity</key>
+  <dict>
+    <key>NSAllowsLocalNetworking</key>
+    <true/>
+    <key>NSExceptionDomains</key>
+    <dict>
+      <key>10.0.0.0/8</key>
+      <dict><key>NSExceptionAllowsInsecureHTTPLoads</key><true/></dict>
+      <key>172.16.0.0/12</key>
+      <dict><key>NSExceptionAllowsInsecureHTTPLoads</key><true/></dict>
+      <key>192.168.0.0/16</key>
+      <dict><key>NSExceptionAllowsInsecureHTTPLoads</key><true/></dict>
+    </dict>
+  </dict>
 </dict>
 </plist>
 PLIST

@@ -222,6 +222,7 @@ esp_err_t app_config_load(void)
     load_string(nvs, "osky_id", loaded.opensky_client_id, sizeof(loaded.opensky_client_id));
     load_string(nvs, "osky_sec", loaded.opensky_client_secret, sizeof(loaded.opensky_client_secret));
     load_string(nvs, "airlabs", loaded.airlabs_api_key, sizeof(loaded.airlabs_api_key));
+    load_string(nvs, "fa_key", loaded.flightaware_api_key, sizeof(loaded.flightaware_api_key));
 
     size_t dock_bytes = sizeof(loaded.dock_entries);
     uint8_t dock_count = loaded.dock_entry_count;
@@ -265,6 +266,9 @@ esp_err_t app_config_load(void)
     }
 
     uint8_t flightaware_available = loaded.flightaware_available ? 1 : 0;
+    uint8_t launch_mask = 0;
+    if (nvs_get_u8(nvs, "launch_mask", &launch_mask) == ESP_OK && launch_mask <= 7)
+        loaded.launch_agency_mask = launch_mask;
     if (nvs_get_u8(nvs, "fa_avail", &flightaware_available) == ESP_OK) {
         loaded.flightaware_available = flightaware_available != 0;
     }
@@ -464,6 +468,9 @@ esp_err_t app_config_save(const app_config_t *config)
     if (err == ESP_OK) {
         err = nvs_set_str(nvs, "airlabs", stored.airlabs_api_key);
     }
+    if (err == ESP_OK) {
+        err = nvs_set_str(nvs, "fa_key", stored.flightaware_api_key);
+    }
     if (!dock_entries_valid(&stored)) {
         set_default_dock_entries(&stored);
     }
@@ -492,6 +499,9 @@ esp_err_t app_config_save(const app_config_t *config)
     }
     if (err == ESP_OK) {
         err = nvs_set_u8(nvs, "fa_avail", stored.flightaware_available ? 1 : 0);
+    }
+    if (err == ESP_OK) {
+        err = nvs_set_u8(nvs, "launch_mask", stored.launch_agency_mask & 7);
     }
     if (err == ESP_OK) {
         err = nvs_set_u32(nvs, "revision", stored.revision);

@@ -18,12 +18,17 @@ idf_component_register(
         "main.c"
         "data.c"
         "locations.c"
+        "launches.c"
+        "launch_policy.c"
         "menu_icons.c"
         "muller_clock_22.c"
         "muller_clock_34.c"
         "network.c"
         "remote.c"
+        "remote_state.c"
         "route_direction.c"
+        "tracker.c"
+        "tracker_policy.c"
     INCLUDE_DIRS "."
     EMBED_FILES
         "assets/startup.png"
@@ -49,6 +54,11 @@ idf_component_register(
         espressif__libpng
         waveshare__esp32_s3_touch_amoled_1_75c
 )
+
+# This merge is called deep in the fixed-size LVGL task stack. Prevent a
+# future full-status staging copy from silently returning to this path.
+set_source_files_properties("remote_state.c" PROPERTIES
+    COMPILE_OPTIONS "-Wframe-larger-than=256;-Werror")
 
 target_link_options(
     ${COMPONENT_LIB}

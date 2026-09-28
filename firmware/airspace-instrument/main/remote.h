@@ -6,6 +6,15 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+struct cJSON;
+
+#define APP_REMOTE_USB_TX_BUFFER_BYTES 512U
+/* Native USB queues an entire write in its bounded ring buffer. */
+static inline size_t app_remote_usb_tx_chunk(size_t remaining)
+{
+    const size_t limit = APP_REMOTE_USB_TX_BUFFER_BYTES / 2;
+    return remaining < limit ? remaining : limit;
+}
 
 #define APP_REMOTE_MAP_WIDTH 466
 #define APP_REMOTE_MAP_HEIGHT 466
@@ -157,7 +166,15 @@ typedef struct {
 } app_remote_status_t;
 
 void app_remote_start(void);
+/* Device-owned launch publication; does not change the selected screen. */
+void app_remote_publish_launches(const app_remote_launch_t launches[3], uint8_t mask);
 void app_remote_get_status(app_remote_status_t *out);
+/* Pure in-place merge. The caller must hold its status lock. No allocation
+ * or full app_remote_status_t automatic copy is permitted in this path. */
+void app_remote_merge_status(app_remote_status_t *current, const app_remote_status_t *incoming,
+                             bool tracker_owns_updates, bool launches_own_updates);
+bool app_remote_decode_state(const struct cJSON *root, app_remote_status_t *out);
+void app_remote_publish_tracker(const app_remote_status_t *flight, bool owns_updates);
 bool app_remote_get_launch_status(
     app_remote_launch_agency_t agency,
     app_remote_status_t *out);

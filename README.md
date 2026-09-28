@@ -46,7 +46,7 @@ ESP32-S3 firmware and a native macOS companion for a 466 × 466 circular AMOLED 
 - Shows current weather, a five-day forecast, and animated radar imagery for the selected city.
 - Includes a GMT-style world clock, sunrise/sunset bezel, and configurable city list.
 - Computes a live solar-system view and lunar phase, animates the next total solar eclipse, and tracks the ISS over a generated world map.
-- Follows selected NASA, Roscosmos, and SpaceX/Starship launch schedules.
+- Follows selected NASA, Roscosmos, and SpaceX/Starship launch schedules directly on the device, even with the Mac closed.
 - Provides touch, two-button navigation, sleep/power controls, brightness adjustment, and an automatic Dock Mode.
 - Uses a native SwiftUI companion to configure the device, manage cities and flights, render maps, validate API credentials, preview every device screen, and install firmware.
 
@@ -86,6 +86,8 @@ The [firmware release folder](release/firmware) contains the app, bootloader, an
 Download [AirESP32ace-macOS.zip](release/macos/AirESP32ace-macOS.zip), unzip it, then Control-click **AirESP32ace.app** and choose **Open**. This build is ad-hoc signed but not notarized with Apple; macOS may require one confirmation in **System Settings → Privacy & Security**. No Apple Developer account is required.
 
 The archive is built from the source in this repository and includes the native device renderer and firmware installer resources. Its SHA-256 checksum is published in [release/macos/SHA256SUMS](release/macos/SHA256SUMS).
+
+Version **0.1.2** moves both launch and tracked-flight runtime updates onto the ESP32. Install the matching firmware and companion together. The Mac configures the tracking list, enabled launch programs, credentials, and artwork; the device refreshes data over Wi-Fi. See [autonomous space launches](docs/autonomous-space-launches.md) for freshness rules, provider limits, and verification details.
 
 ### 3. Run the Mac companion from source
 

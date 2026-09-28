@@ -764,6 +764,33 @@ final class InstrumentPreviewRenderTests: XCTestCase {
         }
     }
 
+    func testDeviceEstimatedPositionRendersOnEveryTrackerPage() throws {
+        let snapshot = try JSONDecoder().decode(DeviceTrackerSnapshot.self, from: Data(
+            #"{"deviceTrackingSupported":true,"preparedFlightCount":1,"status":"En route (estimated)","journeyPhase":"enroute","estimatedPosition":true,"routeProgress":0.52}"#.utf8
+        ))
+        var flight = snapshot.updating(.airPremiaYP111)
+        flight.actualDeparture = Date().addingTimeInterval(-6 * 3600)
+        flight.estimatedArrival = Date().addingTimeInterval(6 * 3600)
+        let model = CompanionModel(resumeSavedMonitoring: false)
+        let directory = URL(fileURLWithPath: "/private/tmp/airspace-estimated-position-previews", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        for page in [DevicePreviewPage.flightGlobe, .flightFrame, .flightDetail] {
+            let image = try XCTUnwrap(NativeInstrumentPreview.snapshot(
+                page: page, flight: flight,
+                localRadarMapImage: model.latestLocalRadarMapImage,
+                geodesicMapImage: model.latestGeodesicMapImage,
+                routeFrameMapImage: model.latestRouteFrameMapImage,
+                airlineLogoImage: model.latestAirlineLogoImage,
+                routeProgress: 0.52, locationName: "San Jose", accent: .green, launch: .preview
+            ))
+            let bitmap = try XCTUnwrap(NSBitmapImageRep(data: XCTUnwrap(image.tiffRepresentation)))
+            XCTAssertEqual(bitmap.pixelsWide, 466)
+            XCTAssertEqual(bitmap.pixelsHigh, 466)
+            let png = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
+            try png.write(to: directory.appendingPathComponent("\(page.rawValue).png"))
+        }
+    }
+
     func testTrackedFlightTimingAutomaticallyRotatesAfterFiveSeconds() throws {
         let now = Date()
         var flight = TrackedFlight.airPremiaYP111

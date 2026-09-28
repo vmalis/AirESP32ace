@@ -12,6 +12,8 @@ struct SharedConfiguration: Codable, Equatable, Sendable {
 
         static let standard = Ownership(
             device: [
+                "trackedFlightRuntime",
+                "launchRuntime",
                 "activeWifiProfile",
                 "location",
                 "display.aircraftLabels",

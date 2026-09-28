@@ -13,7 +13,7 @@ project_dir="$1"
 shift
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-idf_path="${repo_root}/tools/esp-idf"
+idf_path="${IDF_PATH:-${repo_root}/tools/esp-idf}"
 idf_tools_path="${IDF_TOOLS_PATH:-${HOME}/.espressif}"
 known_python_env="${idf_tools_path}/python_env/idf5.5_py3.9_env"
 

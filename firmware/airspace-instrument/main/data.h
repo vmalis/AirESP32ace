@@ -2,6 +2,10 @@
 // Created by VM, August 2026
 
 #pragma once
+struct cJSON;
+
+/* Called only from the data worker; shares Radar's token and rate limiter. */
+struct cJSON *app_data_tracker_opensky(const char *query, int *code);
 
 #include <stdbool.h>
 #include <stddef.h>

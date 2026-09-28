@@ -61,6 +61,7 @@ struct USBConfigurationClient: Sendable {
         let deviceSlot: Int?
         let routeMapMask: Int?
         let routeFlagMask: Int?
+        let preparedFlightCount: Int?
     }
 
     private static let okPrefix = "ASTCFG:OK:"
@@ -118,6 +119,38 @@ struct USBConfigurationClient: Sendable {
                 timeout: 8
             )
             return try JSONDecoder().decode(SharedConfiguration.self, from: data)
+        }.value
+    }
+
+    func fetchTracker(port: String? = nil) async throws -> DeviceTrackerSnapshot {
+        let selectedPort = try resolvedPort(port)
+        return try await Task.detached(priority: .userInitiated) {
+            let descriptor = try Self.openConfiguredPort(selectedPort)
+            defer { Darwin.close(descriptor) }
+            var pending = Data()
+            try Self.waitUntilResponsive(descriptor: descriptor, pending: &pending)
+            guard Self.capabilities(descriptor: descriptor, pending: &pending).contains("TRACKER1") else {
+                throw ClientError.deviceRejected("Update firmware to enable autonomous flight tracking.")
+            }
+            let data = try Self.transact(descriptor: descriptor, pending: &pending,
+                command: "ASTTRACK:GET\n", timeout: 8)
+            return try JSONDecoder().decode(DeviceTrackerSnapshot.self, from: data)
+        }.value
+    }
+
+    func fetchLaunches(port: String? = nil) async throws -> DeviceLaunchSnapshot {
+        let selectedPort = try resolvedPort(port)
+        return try await Task.detached(priority: .userInitiated) {
+            let descriptor = try Self.openConfiguredPort(selectedPort)
+            defer { Darwin.close(descriptor) }
+            var pending = Data()
+            try Self.waitUntilResponsive(descriptor: descriptor, pending: &pending)
+            guard Self.capabilities(descriptor: descriptor, pending: &pending).contains("LAUNCH1") else {
+                throw ClientError.deviceRejected("Update firmware to enable autonomous space launches.")
+            }
+            let data = try Self.transact(descriptor: descriptor, pending: &pending,
+                command: "ASTLAUNCH:GET\n", timeout: 8)
+            return try JSONDecoder().decode(DeviceLaunchSnapshot.self, from: data)
         }.value
     }
 
@@ -237,6 +270,7 @@ struct USBConfigurationClient: Sendable {
         assets: [AssetPayload],
         state: Data,
         port: String? = nil,
+        launchPackage: Bool = false,
         expectedFlightNumber: String? = nil,
         expectedClearedFlight: Bool = false,
         progress: (@Sendable (TransferProgress) -> Void)? = nil,
@@ -260,10 +294,10 @@ struct USBConfigurationClient: Sendable {
             )
             let supportsBinary = Self.preferBinaryTransfer &&
                 capabilities.contains("BIN1")
-            let retainedSlotMask = assets.reduce(0) { mask, asset in
-                guard let slot = Self.assetSlot(asset.name) else { return mask }
-                return mask | (1 << slot)
+            if launchPackage && !capabilities.contains("LAUNCH1") {
+                throw ClientError.deviceRejected("Update firmware to enable autonomous space launches.")
             }
+            let retainedSlotMask = Self.packageRetainedSlotMask(assets: assets, launchPackage: launchPackage)
             try Self.prepareTrackedFlightStorage(
                 descriptor: descriptor,
                 pending: &pending,
@@ -327,6 +361,14 @@ struct USBConfigurationClient: Sendable {
 
     private static func normalizedFlightNumber(_ value: String) -> String {
         value.uppercased().filter { $0.isLetter || $0.isNumber }
+    }
+
+    static func packageRetainedSlotMask(assets: [AssetPayload], launchPackage: Bool) -> Int {
+        if launchPackage { return 15 }
+        return assets.reduce(0) { mask, asset in
+            guard let slot = assetSlot(asset.name) else { return mask }
+            return mask | (1 << slot)
+        }
     }
 
     private func resolvedPort(_ port: String?) throws -> String {
@@ -507,6 +549,11 @@ struct USBConfigurationClient: Sendable {
             StateReceipt.self,
             from: responseData
         )
+        if let root = try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any],
+           let queue = root["trackerQueue"] as? [Any],
+           receipt.preparedFlightCount != queue.count {
+            throw ClientError.stateVerificationFailed("The device did not retain the complete flight queue.")
+        }
         if expectedClearedFlight {
             guard receipt.trackedFlightValid == false else {
                 throw ClientError.stateVerificationFailed(

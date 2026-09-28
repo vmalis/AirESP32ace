@@ -13,6 +13,7 @@ firmware/**/sdkconfig.old
 firmware/**/build/
 firmware/**/managed_components/
 firmware/**/dependencies.lock
+!firmware/airspace-instrument/dependencies.lock
 
 # Swift/Xcode outputs
 companion/**/.build/

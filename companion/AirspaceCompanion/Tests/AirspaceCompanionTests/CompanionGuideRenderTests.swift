@@ -138,6 +138,7 @@ final class CompanionGuideRenderTests: XCTestCase {
         let deviceSteps: [DeviceManagementGuideStep] = [
             .chooser,
             .firmware,
+            .firmwareConnected,
             .setupWarning,
             .setupConnect,
             .setupForm,

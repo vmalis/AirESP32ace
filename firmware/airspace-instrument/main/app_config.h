@@ -110,6 +110,8 @@ typedef struct {
     char opensky_client_secret[96];
     char airlabs_api_key[96];
     bool flightaware_available;
+    char flightaware_api_key[128];
+    uint8_t launch_agency_mask; /* NASA=1, Roscosmos=2, SpaceX=4; zero migrates legacy preferences. */
 } app_config_t;
 
 void app_config_init_defaults(void);

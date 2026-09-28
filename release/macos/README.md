@@ -1,6 +1,8 @@
 # AirESP32ace for macOS
 
-`AirESP32ace-macOS.zip` contains the ready-to-run **AirESP32ace.app** for Apple-silicon Macs.
+`AirESP32ace-macOS.zip` contains **AirESP32ace.app v0.1.2** for Apple-silicon Macs running **macOS 15 or newer**. It includes the matching `AirESP32ace_280926_v01.bin` firmware, bootloader, partition table, and native renderer.
+
+Update both app and device firmware. Launch and tracked-flight updates now run on the ESP32; the companion prescribes programs/flights and reads the device's live state. Existing launch artwork can be retained. See [autonomous space launches](../../docs/autonomous-space-launches.md).
 
 ## Open the app
 

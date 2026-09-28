@@ -68,7 +68,7 @@ final class CompanionModel: ObservableObject {
     @Published private(set) var nextLaunches: [TrackedLaunch] =
         CompanionModel.loadNextLaunches()
     @Published var launchStatusText: String =
-        "Refreshes from the public launch schedule"
+        "Launches update autonomously on the device"
     @Published var latestDeviceAsset: ImageWriter.DeviceImageAsset?
     @Published var routeProgress: Double = 0.46
     @Published var deviceHost: String = CompanionModel.loadDefault(
@@ -410,7 +410,6 @@ final class CompanionModel: ObservableObject {
     private let openSkyDiagnosticClient: OpenSkyDiagnosticClient
     private let previewDataClient = CompanionPreviewDataClient()
     private let apiCredentialValidator: APICredentialValidator
-    private let launchScheduleProvider: LaunchScheduleProvider
     private var trackedFlightPollingTask: Task<Void, Never>?
     private var airlineLogoTask: Task<Void, Never>?
     private var resolvedFlights: [UUID: TrackedFlight] = [:]
@@ -428,6 +427,7 @@ final class CompanionModel: ObservableObject {
     /// progress. An upload may finish before its final delegate callback is
     /// delivered to the main actor.
     private var trackedFlightWiFiProgressGeneration: UUID?
+    private var launchUSBProgressGeneration: UUID?
 
     var selectedAgencyLaunches: [TrackedLaunch] {
         LaunchAgency.allCases.compactMap { agency in
@@ -449,8 +449,6 @@ final class CompanionModel: ObservableObject {
         openSkyDiagnosticClient: OpenSkyDiagnosticClient = OpenSkyDiagnosticClient(),
         apiCredentialValidator: APICredentialValidator =
             APICredentialValidator(),
-        launchScheduleProvider: LaunchScheduleProvider =
-            LaunchScheduleProvider(),
         resumeSavedMonitoring: Bool = true
     ) {
         self.staticFlightProvider = flightProvider
@@ -460,8 +458,6 @@ final class CompanionModel: ObservableObject {
         self.deviceClient = deviceClient
         self.openSkyDiagnosticClient = openSkyDiagnosticClient
         self.apiCredentialValidator = apiCredentialValidator
-        self.launchScheduleProvider =
-            launchScheduleProvider
         resolvedFlights = Self.loadResolvedFlights(for: flightPlans)
         if let savedActiveID = SharedConfigurationStore.load()?
             .companion.activeTrackedFlightId,
@@ -1400,234 +1396,70 @@ final class CompanionModel: ObservableObject {
 
     private func startTrackedFlightPolling() {
         trackedFlightPollingTask?.cancel()
-        guard hasLiveTrackedFlightProvider else {
-            trackedFlightPollingText = "Polling off · no tracked-flight provider"
-            return
-        }
-
         trackedFlightPollingTask = Task { [weak self] in
             while !Task.isCancelled {
                 guard let self else { return }
-                guard let cadence = self.nextTrackedFlightPollCadence() else {
-                    self.refreshActiveFlightSelection()
-                    if self.activePlan != nil {
-                        self.startTrackedFlightPolling()
-                        return
-                    }
-                    self.trackedFlightPollingText = "Nothing to track · polling complete"
-                    UserDefaults.standard.set(
-                        false,
-                        forKey: DefaultsKey.trackedFlightMonitoringActive.rawValue
-                    )
-                    return
-                }
-
-                self.trackedFlightPollingText = cadence.label
-                do {
-                    try await Task.sleep(
-                        nanoseconds: UInt64(max(1, cadence.delay) * 1_000_000_000)
-                    )
-                } catch {
-                    return
-                }
-                guard !Task.isCancelled else { return }
-
-                if cadence.shouldFetch {
-                    let previousPlanID = self.activeFlightPlanID
-                    let refreshed = await self.refreshTrackedFlight(schedulePolling: false)
-                    if refreshed {
-                        if self.activePlan == nil {
-                            await self.pushTrackedFlightStateOnly()
-                        } else if previousPlanID != self.activeFlightPlanID,
-                                  self.trackedFlightTrackingActive {
-                            await self.pushTrackedFlightPackageForAutomaticHandoff()
-                        } else if self.trackedFlightTrackingActive {
-                            await self.pushTrackedFlightStateOnly()
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private func nextTrackedFlightPollCadence() -> (
-        delay: TimeInterval,
-        shouldFetch: Bool,
-        label: String
-    )? {
-        if let plan = activePlan, resolvedFlights[plan.id] == nil {
-            return (
-                1,
-                true,
-                "Fetching \(plan.flightNumber)…"
-            )
-        }
-        if trackedFlight.journeyPhase == "arrived" {
-            guard let expiry = trackedFlight.postArrivalExpiryDate(),
-                  expiry > Date()
-            else { return nil }
-            return (
-                max(1, expiry.timeIntervalSinceNow),
-                false,
-                "Landed · available for two hours"
-            )
-        }
-        if !trackedFlightTrackingActive {
-            guard let plan = activePlan, !plan.isComplete else {
-                return nil
-            }
-            let untilDeparture = plan.effectiveDeparture.timeIntervalSinceNow
-            if untilDeparture > 24 * 3600 {
-                let wait = min(
-                    6 * 3600,
-                    max(60, untilDeparture - 24 * 3600)
-                )
-                return (
-                    wait,
-                    false,
-                    "Scheduled · waiting until the 24-hour window"
-                )
-            }
-            if untilDeparture > 2 * 3600 {
-                return (
-                    3600,
-                    true,
-                    "Schedule pending · checking hourly"
-                )
-            }
-            return (
-                600,
-                true,
-                "Schedule pending · checking every 10 minutes"
-            )
-        }
-        if trackedFlight.actualDeparture != nil {
-            return (60, true, "Airborne · updates every minute")
-        }
-
-        guard let departure = trackedFlight.scheduledDeparture else {
-            return (600, true, "Schedule pending · checking every 10 minutes")
-        }
-        let untilDeparture = departure.timeIntervalSinceNow
-        if untilDeparture > 24 * 3600 {
-            let wait = min(6 * 3600, max(60, untilDeparture - 24 * 3600))
-            return (wait, false, "Outside 24 hours · no automatic API calls")
-        }
-        if untilDeparture > 2 * 3600 {
-            return (3600, true, "Within 24 hours · updates hourly")
-        }
-        return (600, true, "Within 2 hours · updates every 10 minutes")
-    }
-
-    private func pushTrackedFlightStateOnly() async {
-        do {
-            guard hasResolvedTrackedFlightPresentation else {
-                throw CompanionSyncError.unresolvedTrackedFlight
-            }
-            if let port = DeviceSerialDiscovery.preferredPort() {
-                let data = try deviceClient.encodedState(
-                    style: .cartographicGlass,
-                    routeProgress: routeProgress,
-                    flight: trackedFlight,
-                    trackingActive: true,
-                    deviceSlot: activeTrackedFlightDeviceSlot
-                )
-                try await usbConfigurationClient.pushState(
-                    data: data,
-                    port: port,
-                    expectedFlightNumber: trackedFlight.marketingNumber
-                )
-                deviceReachabilityTransport = .usb
-                deviceStatusText = "Flight state updated over USB-C"
-            } else {
-                try await deviceClient.pushState(
-                    host: deviceHost,
-                    style: .cartographicGlass,
-                    routeProgress: routeProgress,
-                    flight: trackedFlight,
-                    trackingActive: true,
-                    deviceSlot: activeTrackedFlightDeviceSlot
-                )
-                deviceStatusText = try await deviceClient.fetchStatus(host: deviceHost)
-            }
-        } catch {
-            trackedFlightPollingText =
-                "Live data updated · device push failed: \(error.localizedDescription)"
-        }
-    }
-
-    private func pushTrackedFlightPackageForAutomaticHandoff() async {
-        do {
-            // App launch and the periodic monitor both pass through this path.
-            // Do not resend a complete route pack when the device already has
-            // the active flight's two maps and two flags; only the compact
-            // flight state needs refreshing in that case.
-            var routePackAlreadyPresent = false
-            if DeviceSerialDiscovery.preferredPort() == nil,
-               let snapshot = try? await deviceClient.fetchStatusSnapshot(
-                   host: deviceHost
-               ) {
-                routePackAlreadyPresent =
-                    snapshot.trackedFlightValid &&
-                    snapshot.routeMapMask == 3 &&
-                    snapshot.routeFlagMask == 3 &&
-                    Self.normalizedFlightNumber(snapshot.trackedFlightNumber) ==
-                        Self.normalizedFlightNumber(trackedFlight.marketingNumber)
-            }
-
-            let sentStateOverUSB = routePackAlreadyPresent
-                ? false
-                : try await pushTrackedFlightMapsAndFlags()
-            if !sentStateOverUSB {
-                if routePackAlreadyPresent {
-                    syncProgress = 0.96
-                    pushState = .pushing(
-                        "Route maps already stored · updating flight state…"
-                    )
+                if case .pushing = self.pushState {
+                    // A package owns the serial connection until acknowledged.
                 } else {
-                    syncProgress = 0.97
-                    pushState = .pushing(
-                        "Wi-Fi transfer complete · sending screen state…"
-                    )
+                    await self.refreshTrackerFromDevice()
                 }
-                try await deviceClient.pushState(
-                    host: deviceHost,
-                    style: .cartographicGlass,
-                    routeProgress: routeProgress,
-                    flight: trackedFlight,
-                    trackingActive: true,
-                    deviceSlot: activeTrackedFlightDeviceSlot
-                )
+                do { try await Task.sleep(for: .seconds(30)) } catch { return }
             }
-            syncProgress = nil
-            pushState = .pushed(
-                routePackAlreadyPresent
-                    ? "Flight state updated · stored maps retained"
-                    : "Tracked flight, maps, and flags synchronized"
-            )
-            trackedFlightPollingText =
-                "Showing \(trackedFlight.marketingNumber) · previous flight completed"
-        } catch {
-            syncProgress = nil
-            pushState = .failed(
-                "Automatic flight handoff failed: \(error.localizedDescription)"
-            )
-            trackedFlightPollingText =
-                "Flight handoff · device sync failed: \(error.localizedDescription)"
         }
     }
+
+    private func deviceTrackerSnapshot() async throws -> DeviceTrackerSnapshot {
+        let forceWiFi = ProcessInfo.processInfo.environment["AIRSPACE_SYNC_TRANSPORT"]?
+            .caseInsensitiveCompare("wifi") == .orderedSame
+        if !forceWiFi, let port = DeviceSerialDiscovery.preferredPort() {
+            if let snapshot = try? await usbConfigurationClient.fetchTracker(port: port) {
+                return snapshot
+            }
+        }
+        return try await deviceClient.fetchTracker(host: deviceHost)
+    }
+
+    private func refreshTrackerFromDevice() async {
+        do {
+            let snapshot = try await deviceTrackerSnapshot()
+            guard snapshot.deviceTrackingSupported else {
+                trackedFlightPollingText = "Update firmware to enable device tracking"
+                return
+            }
+            guard let id = snapshot.planId else {
+                trackedFlightTrackingActive = false
+                routeProgress = 0
+                trackedFlightPollingText = snapshot.preparedFlightCount == 0
+                    ? "Sync prepared flights to start device tracking"
+                    : "Device tracking complete"
+                return
+            }
+            guard let previous = resolvedFlights[id],
+                  previous.marketingNumber == snapshot.flightNumber else {
+                trackedFlightPollingText = "Device tracking \(snapshot.flightNumber ?? "flight")"
+                return
+            }
+            let changedFlight = activeFlightPlanID != id
+            let flight = snapshot.updating(previous)
+            resolvedFlights[id] = flight
+            activeFlightPlanID = id
+            activate(flight)
+            if let index = flightPlans.firstIndex(where: { $0.id == id }) {
+                updatePlan(at: index, with: flight)
+            }
+            if changedFlight { loadCachedPreviewAssets() }
+            trackedFlightPollingText = snapshot.estimatedPosition == true
+                ? "Device tracking · estimated position between live reports"
+                : "Device tracking · \(snapshot.source ?? "updating")"
+        } catch {
+            trackedFlightPollingText = "Device unavailable · autonomous tracking continues when it has internet"
+        }
+    }
+
 
     private func resumeTrackedFlightMonitoring() async {
-        guard hasLiveTrackedFlightProvider else {
-            trackedFlightPollingText =
-                "Saved flight · add FlightAware or AirLabs to resume updates"
-            return
-        }
-        trackedFlightPollingText = "Resuming saved flight…"
-        if await refreshTrackedFlight(schedulePolling: false) {
-            await pushTrackedFlightPackageForAutomaticHandoff()
-            startTrackedFlightPolling()
-        }
+        startTrackedFlightPolling()
     }
 
     func renderRouteMap() async {
@@ -1752,8 +1584,7 @@ final class CompanionModel: ObservableObject {
                 )
                 startTrackedFlightPolling()
             }
-            if sentStateOverUSB {
-                deviceReachabilityTransport = .usb
+            if sentStateOverUSB && deviceReachabilityTransport == .usb {
                 deviceStatusText = "Tracked flight, maps, and flags updated over USB-C"
                 pushState = .pushed("Pushed \(selectedStyle.title) over USB-C")
             } else {
@@ -1816,24 +1647,25 @@ final class CompanionModel: ObservableObject {
 
     @discardableResult
     func refreshNextLaunch() async -> Bool {
-        launchStatusText =
-            "Checking NASA, Roscosmos, and Starship…"
+        guard !pushState.isPushing else { return false }
         do {
-            let launches =
-                try await launchScheduleProvider
-                    .fetchNextLaunches()
-            let filtered = launches.filter {
+            let snapshot: DeviceLaunchSnapshot
+            if let port = DeviceSerialDiscovery.preferredPort(),
+               let usb = try? await usbConfigurationClient.fetchLaunches(port: port) {
+                snapshot = usb
+            } else {
+                snapshot = try await deviceClient.fetchLaunches(host: deviceHost)
+            }
+            guard snapshot.deviceLaunchesSupported else {
+                throw USBConfigurationClient.ClientError.deviceRejected("Update firmware for autonomous space launches.")
+            }
+            let filtered = snapshot.presentations.filter {
                 selectedLaunchAgencies.contains($0.agency)
             }
-            guard let launch = filtered.min(
-                by: { $0.net < $1.net }
-            ) else {
-                throw LaunchScheduleError.noMatchingLaunch
-            }
             nextLaunches = filtered
-            nextLaunch = launch
+            nextLaunch = filtered.first ?? .unavailable
             if let data = try? JSONEncoder().encode(
-                launch
+                nextLaunch
             ) {
                 UserDefaults.standard.set(
                     data,
@@ -1850,47 +1682,38 @@ final class CompanionModel: ObservableObject {
                         DefaultsKey.nextLaunches.rawValue
                 )
             }
-            let formatter = RelativeDateTimeFormatter()
-            formatter.unitsStyle = .full
-            launchStatusText =
-                "\(launch.statusName) · " +
-                formatter.localizedString(
-                    for: launch.net,
-                    relativeTo: Date()
-                )
+            launchStatusText = filtered.isEmpty ? "Device is awaiting launch schedule data" :
+                snapshot.launches.contains(where: { $0.available && $0.stale }) ?
+                "Stale schedule · device will retry automatically" : "Live schedule from device · updates without the Mac"
             return true
         } catch {
-            if nextLaunch.id !=
-                TrackedLaunch.preview.id {
-                launchStatusText =
-                    "Schedule unavailable · using the last saved launch"
-                return true
-            }
-            launchStatusText =
-                "Launch schedule failed: " +
-                error.localizedDescription
+            nextLaunches = nextLaunches.map(\.stalePresentation)
+            nextLaunch = nextLaunch.stalePresentation
+            launchStatusText = "Device unavailable · cached launch data is stale. " + error.localizedDescription
             return false
         }
     }
 
     func syncNextLaunchToDevice() async {
+        let progressID = UUID()
+        launchUSBProgressGeneration = progressID
+        defer { if launchUSBProgressGeneration == progressID { launchUSBProgressGeneration = nil } }
         selectedStyle = .launch
-        pushState = .pushing(
-            "Refreshing the next launch…"
-        )
-        guard await refreshNextLaunch() else {
-            pushState = .failed(launchStatusText)
-            return
-        }
-
+        pushState = .pushing("Preparing autonomous space launches…")
         do {
-            let snapshot =
-                try await deviceClient
-                    .fetchStatusSnapshot(
-                        host: deviceHost
-                    )
-            let installedMask =
-                snapshot.launchAssetMask ?? 0
+            let port = DeviceSerialDiscovery.preferredPort()
+            let installedMask: Int
+            if let port {
+                _ = try await usbConfigurationClient.fetchLaunches(port: port)
+                installedMask = 0 // USB hashes already-installed assets and skips matching data.
+            } else {
+                let support = try await deviceClient.fetchLaunches(host: deviceHost)
+                guard support.deviceLaunchesSupported else {
+                    throw USBConfigurationClient.ClientError.deviceRejected("Update firmware for autonomous space launches.")
+                }
+                installedMask = try await deviceClient.fetchStatusSnapshot(host: deviceHost).launchAssetMask ?? 0
+            }
+            let state = try deviceClient.encodedLaunchPreferences(agencies: selectedLaunchAgencies)
             let assets: [(String, String)] = [
                 ("launch_sls", "rga"),
                 ("launch_falcon9", "rga"),
@@ -1901,6 +1724,7 @@ final class CompanionModel: ObservableObject {
                 ("launch_starbase", "rgb"),
                 ("launch_baikonur", "rgb"),
             ]
+            var usbAssets: [USBConfigurationClient.AssetPayload] = []
             for (index, asset) in
                 assets.enumerated()
             where
@@ -1917,29 +1741,32 @@ final class CompanionModel: ObservableObject {
                 let data = try Data(
                     contentsOf: url
                 )
-                try await deviceClient
-                    .pushSpaceAsset(
-                        host: deviceHost,
-                        name: asset.0,
-                        data: data
-                    )
+                if port != nil { usbAssets.append(.init(name: asset.0, data: data)) }
+                else { try await deviceClient.pushSpaceAsset(host: deviceHost, name: asset.0, data: data) }
             }
 
-            pushState = .pushing(
-                "Sending \(nextLaunch.missionName)…"
-            )
-            try await deviceClient.pushLaunchState(
-                host: deviceHost,
-                launch: nextLaunch,
-                launches: nextLaunches
-            )
-            deviceStatusText =
-                try await deviceClient.fetchStatus(
-                    host: deviceHost
-                )
-            pushState = .pushed(
-                "Launch screens ready on \(deviceHost)"
-            )
+            pushState = .pushing("Installing launch preferences and artwork…")
+            if let port {
+                try await usbConfigurationClient.pushPackage(assets: usbAssets, state: state, port: port,
+                    launchPackage: true, progress: { [weak self] progress in
+                        Task { @MainActor in
+                            guard self?.launchUSBProgressGeneration == progressID else { return }
+                            self?.pushState = .pushing("Launch artwork \(progress.assetIndex)/\(progress.assetCount) · \(Int(progress.fraction * 100))%")
+                        }
+                    })
+            } else { try await deviceClient.pushLaunchPreferences(host: deviceHost, data: state) }
+            launchUSBProgressGeneration = nil
+            pushState = .pushing("Verifying launch provider preferences…")
+            let receipt = port != nil ? try await usbConfigurationClient.fetchLaunches(port: port) :
+                try await deviceClient.fetchLaunches(host: deviceHost)
+            let expectedMask = selectedLaunchAgencies.reduce(0) {
+                $0 | ($1 == .nasa ? 1 : $1 == .roscosmos ? 2 : 4)
+            }
+            guard receipt.enabledMask == expectedMask else {
+                throw USBConfigurationClient.ClientError.deviceRejected("Launch provider preferences were not retained.")
+            }
+            pushState = .pushed("Launch screens ready · device refreshes autonomously")
+            _ = await refreshNextLaunch()
         } catch {
             pushState = .failed(
                 "Launch sync failed: " +
@@ -2304,7 +2131,8 @@ final class CompanionModel: ObservableObject {
                             : airLabsAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
                     ),
                     flightAware: .init(
-                        available: flightAwareCredentialState.isValid
+                        available: flightAwareCredentialState.isValid,
+                        apiKey: flightAwareAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
                     )
                 ),
                 companion: companion
@@ -2424,13 +2252,33 @@ final class CompanionModel: ObservableObject {
         }
     }
 
-    /// Returns true when the compact tracked-flight state was included in a
-    /// complete USB-C package. Wi-Fi callers still send state separately.
+    /// Both transports install the complete queue after its route assets.
     private func pushTrackedFlightMapsAndFlags() async throws -> Bool {
+        let capability = try await deviceTrackerSnapshot()
+        guard capability.deviceTrackingSupported else {
+            throw USBConfigurationClient.ClientError.deviceRejected(
+                "Update firmware to enable autonomous flight tracking."
+            )
+        }
         let packages = try await preparedFlightPackagesForPush()
         guard !packages.isEmpty else {
             throw CocoaError(.fileNoSuchFile)
         }
+        let queue = try deviceClient.encodedTrackerQueue(
+            flights: try packages.map { package in
+                guard let plan = flightPlans.first(where: { $0.deviceSlot == package.slot }) else {
+                    throw CocoaError(.validationMissingMandatoryProperty)
+                }
+                return (plan: plan, flight: package.flight)
+            },
+            credentials: .init(
+                openSky: .init(enabled: true, clientId: openSkyClientID.trimmed,
+                    clientSecret: openSkyClientSecret.trimmed),
+                airLabs: .init(apiKey: airLabsAPIKey.trimmed),
+                flightAware: .init(available: !flightAwareAPIKey.trimmed.isEmpty,
+                    apiKey: flightAwareAPIKey.trimmed)
+            )
+        )
 
         // Normal app operation always prefers the direct USB-C transport. The
         // environment override exists only so the release/test CLI can verify
@@ -2478,19 +2326,12 @@ final class CompanionModel: ObservableObject {
                     )
                 )
             }
-            let state = try deviceClient.encodedState(
-                style: .cartographicGlass,
-                routeProgress: routeProgress,
-                flight: trackedFlight,
-                trackingActive: true,
-                deviceSlot: activeTrackedFlightDeviceSlot
-            )
             pushState = .pushing(
                 "Sending \(packages.count) tracked-flight pack\(packages.count == 1 ? "" : "s") over USB-C…"
             )
             try await usbConfigurationClient.pushPackage(
                 assets: assets,
-                state: state,
+                state: queue,
                 port: port,
                 expectedFlightNumber: trackedFlight.marketingNumber,
                 progress: { [weak self] progress in
@@ -2658,22 +2499,17 @@ final class CompanionModel: ObservableObject {
             )
         } catch {
             trackedFlightWiFiProgressGeneration = nil
-            let snapshot = try await deviceClient.fetchStatusSnapshot(
-                host: deviceHost
-            )
-            guard snapshot.routeMapMask == 3,
-                  snapshot.routeFlagMask == 3,
-                  snapshot.trackedFlightNumber
-                    .caseInsensitiveCompare(trackedFlight.marketingNumber)
-                    == .orderedSame
-            else {
-                throw error
-            }
-            pushState = .pushing(
-                "Map refresh unavailable · retaining this flight’s stored maps…"
-            )
+            // The current slot cannot prove that every future flight's
+            // assets arrived. Never activate a partially transferred queue.
+            throw error
         }
-        return false
+        try await deviceClient.pushTrackerQueue(host: deviceHost, data: queue)
+        let receipt = try await deviceClient.fetchTracker(host: deviceHost)
+        guard receipt.preparedFlightCount == packages.count else {
+            throw USBConfigurationClient.ClientError.stateVerificationFailed("The device did not retain the complete flight queue.")
+        }
+        deviceReachabilityTransport = .wifi
+        return true
     }
 
     private struct PreparedFlightPackage {
@@ -3422,9 +3258,9 @@ final class CompanionModel: ObservableObject {
                 from: data
             )
         else {
-            return .preview
+            return .unavailable
         }
-        return launch
+        return launch.stalePresentation
     }
 
     private static func loadNextLaunches() -> [TrackedLaunch] {
@@ -3441,7 +3277,7 @@ final class CompanionModel: ObservableObject {
         else {
             return [loadNextLaunch()]
         }
-        return launches.sorted { $0.net < $1.net }
+        return launches.map(\.stalePresentation).sorted { $0.net < $1.net }
     }
 
     private static func normalizedFlightNumber(_ value: String) -> String {

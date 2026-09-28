@@ -2,6 +2,7 @@
 // Created by VM, August 2026
 
 import AppKit
+import Combine
 import Foundation
 import SwiftUI
 
@@ -72,10 +73,16 @@ struct AirspaceCompanionApp: App {
                 if let pushHost {
                     model.deviceHost = pushHost
                 }
+                let trace = arguments.contains("--trace-sync")
+                    ? model.$pushState.map(\.message).removeDuplicates().sink { message in
+                        // Phase/progress only: never log configuration payloads or credentials.
+                        FileHandle.standardError.write(Data("Sync: \(message)\n".utf8))
+                    } : nil
                 FileHandle.standardError.write(
                     Data("Synchronizing the saved flight schedule…\n".utf8)
                 )
                 await model.syncTrackedFlightsToDevice()
+                withExtendedLifetime(trace) {}
                 print(model.pushState.message)
                 if case .failed = model.pushState {
                     Foundation.exit(1)

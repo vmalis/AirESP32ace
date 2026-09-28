@@ -2701,7 +2701,7 @@ private struct APIsWorkspace: View {
                 }
             }
 
-            Text("Credentials are stored in this Mac account with owner-only file permissions. Only OpenSky and AirLabs are copied to the portable device; FlightAware remains on the Mac.")
+            Text("Credentials are stored in this Mac account with owner-only file permissions and copied to your paired device. The device keeps tracking over Wi-Fi when this app is closed.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 4)
@@ -3030,6 +3030,9 @@ private struct DevicePreviewColumn: View {
         case .weather:
             async let weather: Void = model.refreshCompanionWeather()
             _ = await (status, weather)
+        case .launches:
+            _ = await model.refreshNextLaunch()
+            _ = await status
         default:
             _ = await status
         }

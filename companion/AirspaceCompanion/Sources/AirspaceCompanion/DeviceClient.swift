@@ -132,6 +132,7 @@ struct DeviceClient: Sendable {
 
         struct FlightAware: Encodable {
             let available: Bool
+            var apiKey: String? = nil
         }
 
         struct Display: Encodable {
@@ -171,6 +172,92 @@ struct DeviceClient: Sendable {
         let (data, response) = try await URLSession.shared.data(for: request)
         try validate(response: response, data: data)
         return String(data: data, encoding: .utf8) ?? "{}"
+    }
+
+    func fetchTracker(host: String) async throws -> DeviceTrackerSnapshot {
+        var request = URLRequest(url: try url(host: host, path: "/api/tracker"))
+        request.timeoutInterval = controlTimeout
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await URLSession.shared.data(for: request)
+        } catch {
+            if CommandLine.arguments.contains("--trace-sync") {
+                let failure = error as NSError
+                FileHandle.standardError.write(Data(
+                    "Tracker read failed at \(request.url?.host ?? "device")/api/tracker: \(failure.domain) \(failure.code)\n".utf8
+                ))
+                if let underlying = failure.userInfo[NSUnderlyingErrorKey] as? NSError {
+                    FileHandle.standardError.write(Data("Network detail: \(underlying.domain) \(underlying.code)\n".utf8))
+                }
+            }
+            throw error
+        }
+        try validate(response: response, data: data)
+        return try JSONDecoder().decode(DeviceTrackerSnapshot.self, from: data)
+    }
+
+    func fetchLaunches(host: String) async throws -> DeviceLaunchSnapshot {
+        var request = URLRequest(url: try url(host: host, path: "/api/launches"))
+        request.timeoutInterval = controlTimeout
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try validate(response: response, data: data)
+        return try JSONDecoder().decode(DeviceLaunchSnapshot.self, from: data)
+    }
+
+    func encodedLaunchPreferences(agencies: Set<LaunchAgency>) throws -> Data {
+        guard !agencies.isEmpty else { throw CocoaError(.validationMissingMandatoryProperty) }
+        return try JSONSerialization.data(withJSONObject: [
+            "style": "launch", "launchAgencies": agencies.map(\.rawValue).sorted()
+        ], options: [.sortedKeys])
+    }
+
+    func pushLaunchPreferences(host: String, data: Data) async throws {
+        // Same acknowledged state transport, without any launch runtime snapshot.
+        try await pushTrackerQueue(host: host, data: data)
+    }
+
+    func encodedTrackerQueue(
+        flights: [(plan: PlannedFlight, flight: TrackedFlight)],
+        credentials: DeviceConfigPayload.Credentials
+    ) throws -> Data {
+        guard flights.count <= 4 else { throw CocoaError(.validationMissingMandatoryProperty) }
+        var queue: [[String: Any]] = []
+        for (plan, flight) in flights {
+            guard let departure = plan.legSelection?.scheduledDeparture ?? flight.scheduledDeparture,
+                  let slot = plan.deviceSlot, (0...3).contains(slot) else {
+                throw CocoaError(.validationMissingMandatoryProperty)
+            }
+            let seed = try encodedState(style: .cartographicGlass,
+                routeProgress: flight.routeProgress ?? 0, flight: flight, deviceSlot: slot)
+            var item = try JSONSerialization.jsonObject(with: seed) as! [String: Any]
+            item["tracking"] = [
+                "planId": plan.id.uuidString,
+                "providerId": plan.selectedProviderIdentifier?.hasPrefix("airlabs-") == true
+                    ? "" : (plan.selectedProviderIdentifier ?? ""),
+                "scheduledDepartureUnix": Int64(departure.timeIntervalSince1970),
+                "originLatitude": flight.origin.coordinate.latitude,
+                "originLongitude": flight.origin.coordinate.longitude,
+                "destinationLatitude": flight.destination.coordinate.latitude,
+                "destinationLongitude": flight.destination.coordinate.longitude,
+            ]
+            queue.append(item)
+        }
+        return try JSONSerialization.data(withJSONObject: [
+            "style": InstrumentStyle.cartographicGlass.rawValue,
+            "trackerQueue": queue,
+            "trackerCredentials": try JSONSerialization.jsonObject(with: JSONEncoder().encode(credentials)),
+        ], options: [.sortedKeys])
+    }
+
+    func pushTrackerQueue(host: String, data: Data) async throws {
+        var request = URLRequest(url: try url(host: host, path: "/api/state"))
+        request.httpMethod = "POST"
+        request.timeoutInterval = controlTimeout
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = data
+        let (body, response) = try await URLSession.shared.data(for: request)
+        try validate(response: response, data: body)
     }
 
     enum RouteMapView: String, Sendable {

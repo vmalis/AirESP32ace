@@ -9,6 +9,7 @@ import UniformTypeIdentifiers
 enum DeviceManagementGuideStep: String, CaseIterable {
     case chooser
     case firmware
+    case firmwareConnected
     case setupWarning
     case setupConnect
     case setupForm
@@ -102,7 +103,7 @@ struct DeviceManagementView: View {
         for guideStep: DeviceManagementGuideStep?
     ) -> Step {
         switch guideStep {
-        case .firmware:
+        case .firmware, .firmwareConnected:
             .firmware
         case .setupWarning:
             .setupWarning
@@ -185,13 +186,13 @@ struct DeviceManagementView: View {
         )
         .shadow(color: .black.opacity(0.75), radius: 45, y: 24)
         .onAppear {
-            installer.startMonitoring()
+            if guideStep == nil { installer.startMonitoring() }
         }
         .onDisappear {
             installer.stopMonitoring()
         }
         .onChange(of: installer.serialPort) { _, newPort in
-            guard step == .setupConnect, newPort != nil else { return }
+            guard guideStep == nil, step == .setupConnect, newPort != nil else { return }
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(450))
                 guard step == .setupConnect,
@@ -362,10 +363,44 @@ struct DeviceManagementView: View {
     }
 
     private var firmwareUpdate: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: 0) {
+            ScrollView {
+                firmwareUpdateContent
+                    .frame(maxWidth: .infinity)
+                    .padding(28)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            Divider().overlay(.white.opacity(0.08))
+
+            // Keep navigation and the disabled install action visible even
+            // when the disconnected cable artwork exceeds the card height.
+            actionRow(
+                back: { step = .chooser },
+                title: "Install Update",
+                enabled: firmwareSerialPort != nil && installer.firmwareAvailable
+            ) {
+                requestFirmwareInstallation()
+            }
+            .padding(.horizontal, 28)
+            .padding(.vertical, 16)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var firmwareSerialPort: String? {
+        switch guideStep {
+        case .firmware: nil
+        case .firmwareConnected: "/dev/cu.usbmodem-preview"
+        default: installer.serialPort
+        }
+    }
+
+    private var firmwareUpdateContent: some View {
+        VStack(spacing: 14) {
             DeviceCableStatus(
-                serialPort: installer.serialPort,
-                networkReachable: model.deviceReachable
+                serialPort: firmwareSerialPort,
+                networkReachable: guideStep == nil && model.deviceReachable
             )
 
             usbTargetPicker
@@ -418,18 +453,8 @@ struct DeviceManagementView: View {
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 500)
-
-            Spacer(minLength: 0)
-
-            actionRow(
-                back: { step = .chooser },
-                title: "Install Update",
-                enabled: installer.serialPort != nil && installer.firmwareAvailable
-            ) {
-                requestFirmwareInstallation()
-            }
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(28)
     }
 
     private var setupWarning: some View {
@@ -545,7 +570,7 @@ struct DeviceManagementView: View {
                     setupSection(title: "FLIGHT DATA", symbol: "airplane") {
                         VStack(spacing: 9) {
                             setupField(
-                                "FlightAware AeroAPI key (Mac only)",
+                                "FlightAware AeroAPI key",
                                 text: $model.flightAwareAPIKey,
                                 secure: true
                             )
@@ -649,7 +674,13 @@ struct DeviceManagementView: View {
                         : DeviceSetupTheme.green
                 )
 
-            if installer.serialCandidates.isEmpty {
+            if guideStep == .firmwareConnected {
+                Text("USB TARGET")
+                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                Text("cu.usbmodem-preview")
+                    .font(.caption)
+            } else if installer.serialCandidates.isEmpty {
                 Text("No USB target detected")
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)
@@ -920,11 +951,11 @@ private struct DeviceCableStatus: View {
 
     var body: some View {
         VStack(spacing: large ? 4 : -4) {
-            SetupDeviceArtwork(size: large ? 218 : 154)
+            SetupDeviceArtwork(size: large ? 218 : 114)
 
             ZStack {
                 if serialPort == nil {
-                    PremiumUSBCableArtwork(connectorWidth: (large ? 218 : 154) * 0.40)
+                    PremiumUSBCableArtwork(connectorWidth: large ? 87 : 26)
                         .opacity(cableVisible ? 1.0 : 0.68)
                         .scaleEffect(cableVisible ? 1.0 : 0.975)
                 } else {
@@ -939,7 +970,7 @@ private struct DeviceCableStatus: View {
                     .transition(.opacity.combined(with: .scale))
                 }
             }
-            .frame(width: large ? 110 : 78, height: large ? 218 : 154)
+            .frame(width: large ? 110 : 78, height: large ? 218 : 66)
 
             VStack(spacing: 3) {
                 Text(serialPort == nil ? "Waiting for USB-C" : "Device connected")
@@ -1005,8 +1036,6 @@ private struct SetupDeviceArtwork: View {
                             ),
                             lineWidth: 10
                         )
-                    DeviceOutlineGlyph(color: .white.opacity(0.65))
-                        .frame(width: size * 0.30, height: size * 0.30)
                 }
             }
         }

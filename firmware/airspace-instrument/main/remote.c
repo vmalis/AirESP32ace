@@ -2,6 +2,8 @@
 // Created by VM, August 2026
 
 #include "remote.h"
+#include "tracker.h"
+#include "launches.h"
 
 #include <ctype.h>
 #include <errno.h>
@@ -108,6 +110,22 @@ static const char *TAG = "airspace_remote";
 #define TRACKED_ASSET_KIND_COUNT 4
 
 static app_remote_status_t *status;
+static bool tracker_owns_display;
+static bool launches_own_display;
+
+static void copy_tracker_fields(app_remote_status_t *to, const app_remote_status_t *from)
+{
+    /* Preserve unrelated weather, maps, launch state and transport counters. */
+    memcpy((uint8_t *)to + offsetof(app_remote_status_t, route_progress),
+           (const uint8_t *)from + offsetof(app_remote_status_t, route_progress),
+           offsetof(app_remote_status_t, map_valid) - offsetof(app_remote_status_t, route_progress));
+    memcpy((uint8_t *)to + offsetof(app_remote_status_t, tracked_route_geometry_version),
+           (const uint8_t *)from + offsetof(app_remote_status_t, tracked_route_geometry_version),
+           offsetof(app_remote_status_t, launch_valid) - offsetof(app_remote_status_t, tracked_route_geometry_version));
+    memcpy((uint8_t *)to + offsetof(app_remote_status_t, tracked_flight_origin_terminal),
+           (const uint8_t *)from + offsetof(app_remote_status_t, tracked_flight_origin_terminal),
+           sizeof(*to) - offsetof(app_remote_status_t, tracked_flight_origin_terminal));
+}
 
 static SemaphoreHandle_t status_mutex;
 static SemaphoreHandle_t config_mutex;
@@ -286,7 +304,10 @@ static void write_status(const app_remote_status_t *next)
     if (status_mutex != NULL) {
         xSemaphoreTake(status_mutex, portMAX_DELAY);
     }
-    *status = *next;
+    /* Do not stage another full status on the caller's stack. Large status
+     * snapshots in the map-loading chain exhausted the 16 KiB LVGL stack
+     * when opening Tracker, corrupting heap memory before a task switch. */
+    app_remote_merge_status(status, next, tracker_owns_display, launches_own_display);
     if (status_mutex != NULL) {
         xSemaphoreGive(status_mutex);
     }
@@ -301,7 +322,7 @@ static void copy_string(char *dst, size_t dst_size, const char *src)
     snprintf(dst, dst_size, "%s", src ? src : "");
 }
 
-static bool ensure_map_buffers(map_store_t *store, const char *label)
+static __attribute__((noinline)) bool ensure_map_buffers(map_store_t *store, const char *label)
 {
     for (int i = 0; i < MAP_STORE_BUFFER_COUNT; i++) {
         if (store->buffers[i] != NULL) {
@@ -309,11 +330,16 @@ static bool ensure_map_buffers(map_store_t *store, const char *label)
         }
         store->buffers[i] = (uint8_t *)heap_caps_malloc(APP_REMOTE_MAP_BYTES, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
         if (store->buffers[i] == NULL) {
-            app_remote_status_t s = read_status();
-            char error[80];
-            snprintf(error, sizeof(error), "no PSRAM for %s map buffers", label);
-            copy_string(s.last_error, sizeof(s.last_error), error);
-            write_status(&s);
+            /* The compiler reserves error-path locals even when allocation
+             * succeeds. A by-value status read used 6 KiB here, nested below
+             * Tracker's render and map snapshots. Keep this leaf bounded. */
+            if (ensure_status_storage() != NULL) {
+                if (status_mutex != NULL) xSemaphoreTake(status_mutex, portMAX_DELAY);
+                snprintf(status->last_error, sizeof(status->last_error),
+                         "no PSRAM for %s map buffers", label);
+                status->revision++;
+                if (status_mutex != NULL) xSemaphoreGive(status_mutex);
+            }
             ESP_LOGW(TAG, "No PSRAM for %s map buffer %d", label, i);
             return false;
         }
@@ -1566,6 +1592,8 @@ static cJSON *build_shared_config_json(
     cJSON *ownership = cJSON_AddObjectToObject(root, "ownership");
     cJSON *device_owned = cJSON_AddArrayToObject(ownership, "device");
     const char *device_keys[] = {
+        "trackedFlightRuntime",
+        "launchRuntime",
         "activeWifiProfile",
         "location",
         "display.aircraftLabels",
@@ -1649,6 +1677,13 @@ static cJSON *build_shared_config_json(
         : read_persisted_companion_config();
     if (companion == NULL) {
         companion = cJSON_CreateObject();
+    }
+    if (cfg.launch_agency_mask) {
+        cJSON_DeleteItemFromObjectCaseSensitive(companion, "launchAgencies");
+        cJSON *agencies = cJSON_AddArrayToObject(companion, "launchAgencies");
+        const char *names[] = {"nasa", "roscosmos", "spacex"};
+        for (unsigned a = 0; a < 3; a++) if (cfg.launch_agency_mask & (1U << a))
+            cJSON_AddItemToArray(agencies, cJSON_CreateString(names[a]));
     }
     if (!cJSON_IsArray(cJSON_GetObjectItemCaseSensitive(companion, "clockCities"))) {
         add_location_key_array(companion, "clockCities", cfg.clock_city_keys);
@@ -2200,6 +2235,11 @@ static esp_err_t apply_shared_config_root(
     const cJSON *radar_locations = cJSON_IsObject(companion)
         ? cJSON_GetObjectItemCaseSensitive(companion, "radarLocations")
         : NULL;
+    const cJSON *launch_agencies = cJSON_GetObjectItemCaseSensitive(companion, "launchAgencies");
+    if (launch_agencies && !app_launch_agencies(launch_agencies, &next.launch_agency_mask)) {
+        snprintf(error, error_size, "invalid launch agencies");
+        return ESP_ERR_INVALID_ARG;
+    }
     if (cJSON_IsArray(radar_locations)) {
         apply_location_definitions_json(&next, radar_locations);
         /* The city lists below validate against the synchronized catalog. */
@@ -2263,6 +2303,7 @@ static esp_err_t apply_shared_config_root(
     if (cJSON_IsBool(flight_aware_available)) {
         next.flightaware_available = cJSON_IsTrue(flight_aware_available);
     }
+    copy_json_string(next.flightaware_api_key, sizeof(next.flightaware_api_key), flight_aware, "apiKey");
 
     const bool reconnect_wifi = wifi_config_changed(&before, &next);
     const bool location_changed = strcmp(before.location_key, next.location_key) != 0 ||
@@ -2382,23 +2423,30 @@ static void usb_config_send(const char *prefix, const char *payload)
     response[response_length] = '\0';
     size_t written = 0;
     const TickType_t deadline = xTaskGetTickCount() + pdMS_TO_TICKS(3000);
+    /* Keep console logs from splitting a framed JSON response. Never pass a
+     * whole configuration/launch snapshot to the 512-byte driver ring: its
+     * all-or-nothing enqueue cannot accept a write larger than that ring. */
+    flockfile(stdout);
     while (written < response_length &&
            (int32_t)(deadline - xTaskGetTickCount()) > 0) {
+        const size_t block_size = app_remote_usb_tx_chunk(response_length - written);
         const ssize_t count = usb_config_driver_ready
             ? usb_serial_jtag_write_bytes(
                   response + written,
-                  response_length - written,
+                  block_size,
                   pdMS_TO_TICKS(25))
             : write(
                   usb_config_fd,
                   response + written,
-                  response_length - written);
+                  block_size);
         if (count > 0) {
             written += (size_t)count;
         } else {
             vTaskDelay(pdMS_TO_TICKS(2));
         }
     }
+    funlockfile(stdout);
+    if (written != response_length) ESP_LOGW(TAG, "USB response incomplete: %u/%u bytes", (unsigned)written, (unsigned)response_length);
     /* /dev/secondary is the USB Serial/JTAG character device, not a file.
      * The write above queues the complete acknowledgement. fsync() on every
      * 12 KiB chunk serialized the transport and made multi-map packages take
@@ -3072,17 +3120,22 @@ static void usb_state_set(const char *body)
     persist_tracked_state(&applied);
     write_status(&applied);
 
-    char response[176];
+    cJSON *tracker = app_tracker_snapshot();
+    const cJSON *count = cJSON_GetObjectItemCaseSensitive(tracker, "preparedFlightCount");
+    int prepared_count = cJSON_IsNumber(count) ? count->valueint : 0;
+    cJSON_Delete(tracker);
+    char response[208];
     snprintf(
         response,
         sizeof(response),
         "{\"trackedFlightValid\":%s,\"trackedFlightNumber\":\"%.15s\","
-        "\"deviceSlot\":%u,\"routeMapMask\":%lu,\"routeFlagMask\":%lu}",
+        "\"deviceSlot\":%u,\"routeMapMask\":%lu,\"routeFlagMask\":%lu,\"preparedFlightCount\":%d}",
         applied.tracked_flight_valid ? "true" : "false",
         applied.tracked_flight_number,
         (unsigned)applied.tracked_flight_slot,
         (unsigned long)applied.route_map_valid_mask,
-        (unsigned long)applied.route_flag_valid_mask);
+        (unsigned long)applied.route_flag_valid_mask,
+        prepared_count);
     usb_config_send(USB_STATE_OK_PREFIX, response);
     if (usb_package_active) {
         usb_package_active = false;
@@ -3108,7 +3161,7 @@ static void usb_config_process_line(char *line)
         return;
     }
     if (strcmp(line, USB_CONFIG_CAPS_COMMAND) == 0) {
-        usb_config_send(USB_CONFIG_CAPS_PREFIX, "BIN1");
+        usb_config_send(USB_CONFIG_CAPS_PREFIX, "BIN1,TRACKER1,LAUNCH1");
         return;
     }
 
@@ -3169,6 +3222,17 @@ static void usb_config_process_line(char *line)
         return;
     }
 
+    if (strcmp(line, "ASTTRACK:GET") == 0 || strcmp(line, "ASTLAUNCH:GET") == 0) {
+        const bool launch_request = strcmp(line, "ASTLAUNCH:GET") == 0;
+        if (launch_request) ESP_LOGI(TAG, "USB launch snapshot requested");
+        cJSON *snapshot = strcmp(line, "ASTLAUNCH:GET") == 0 ? app_launches_json() : app_tracker_snapshot();
+        char *body = cJSON_PrintUnformatted(snapshot);
+        cJSON_Delete(snapshot);
+        if (launch_request) ESP_LOGI(TAG, "USB launch snapshot encoded: %u bytes", body ? (unsigned)strlen(body) : 0);
+        if (body) { usb_config_send(USB_CONFIG_OK_PREFIX, body); cJSON_free(body); }
+        else usb_config_send(USB_CONFIG_ERROR_PREFIX, "could not read tracker");
+        return;
+    }
     if (strcmp(line, USB_CONFIG_GET_COMMAND) == 0) {
         if (config_mutex != NULL) {
             xSemaphoreTake(config_mutex, portMAX_DELAY);
@@ -3252,7 +3316,7 @@ static void usb_config_task(void *arg)
      * block reads below avoid the VFS's per-character loop as well. */
     usb_serial_jtag_driver_config_t driver_config = {
         .rx_buffer_size = 4096,
-        .tx_buffer_size = 512,
+        .tx_buffer_size = APP_REMOTE_USB_TX_BUFFER_BYTES,
     };
     esp_err_t driver_error = usb_serial_jtag_driver_install(&driver_config);
     if (driver_error == ESP_OK ||
@@ -3385,6 +3449,7 @@ static void usb_config_task(void *arg)
 static esp_err_t data_refresh_post_handler(httpd_req_t *req)
 {
     (void)req;
+    app_launches_request_refresh();
     app_data_request_refresh();
     return send_json(req, "{\"ok\":true}");
 }
@@ -3501,7 +3566,7 @@ static esp_err_t status_get_handler(httpd_req_t *req)
              "\"trackedFlightValid\":%s,\"trackedFlightNumber\":\"%s\","
              "\"trackedFlightAltitudeM\":%d,\"trackedFlightSpeedKPH\":%d,"
              "\"trackedFlightHeadingDegrees\":%d,\"trackedFlightHeadingValid\":%s,"
-             "\"launchValid\":%s,\"launchOptionMask\":%u,\"launchAssetMask\":%lu,"
+             "\"deviceLaunchesSupported\":true,\"launchValid\":%s,\"launchOptionMask\":%u,\"launchAssetMask\":%lu,"
              "\"spaceAssetFileMask\":%lu,\"spaceAssetLoadedMask\":%lu,"
              "\"spaceAssetExpectedMask\":%lu,\"spaceAssetLoadFailures\":%lu,"
              "\"weatherCityIconMask\":%lu,\"weatherCityIconExpectedMask\":%lu,"
@@ -3784,13 +3849,13 @@ static esp_err_t weather_get_handler(httpd_req_t *req)
     return err;
 }
 
-static esp_err_t apply_state_root(cJSON *root)
+bool app_remote_decode_state(const cJSON *root, app_remote_status_t *out)
 {
-    if (!cJSON_IsObject(root)) {
-        return ESP_ERR_INVALID_ARG;
+    if (!cJSON_IsObject(root) || out == NULL) {
+        return false;
     }
 
-    app_remote_status_t next = read_status();
+    app_remote_status_t next = *out;
     const cJSON *flight_slot =
         cJSON_GetObjectItemCaseSensitive(root, "deviceSlot");
     if (cJSON_IsNumber(flight_slot)) {
@@ -4197,6 +4262,39 @@ static esp_err_t apply_state_root(cJSON *root)
         }
     }
 
+    *out = next;
+    return true;
+}
+
+static esp_err_t apply_state_root(cJSON *root)
+{
+    const cJSON *agencies = cJSON_GetObjectItemCaseSensitive(root, "launchAgencies");
+    if (agencies) {
+        app_config_t cfg; app_config_get(&cfg);
+        if (!app_launch_agencies(agencies, &cfg.launch_agency_mask)) return ESP_ERR_INVALID_ARG;
+        esp_err_t error = app_config_save(&cfg);
+        if (error != ESP_OK) return error;
+        app_launches_request_refresh();
+    }
+    app_remote_status_t next;
+    if (cJSON_HasObjectItem(root, "trackerQueue")) {
+        if (!app_tracker_install(root)) return ESP_ERR_INVALID_ARG;
+        next = read_status();
+        const cJSON *style = cJSON_GetObjectItemCaseSensitive(root, "style");
+        if (cJSON_IsString(style)) next.style = parse_style(style->valuestring);
+        next.last_push_unix = (int)time(NULL);
+        next.state_pushes++;
+        next.revision++;
+        write_status(&next);
+        return ESP_OK;
+    }
+    next = read_status();
+    if (!app_remote_decode_state(root, &next)) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (cJSON_IsFalse(cJSON_GetObjectItemCaseSensitive(root, "trackingActive"))) {
+        if (!app_tracker_clear()) return ESP_FAIL;
+    }
     next.revision++;
     next.state_pushes++;
     next.last_push_unix = (int)time(NULL);
@@ -4210,12 +4308,12 @@ static esp_err_t apply_state_root(cJSON *root)
 
 static esp_err_t state_post_handler(httpd_req_t *req)
 {
-    char *body = read_request_body(req, 4096);
+    char *body = read_request_body(req, 20 * 1024);
     if (body == NULL) {
         httpd_resp_send_err(
             req,
             HTTPD_400_BAD_REQUEST,
-            "state JSON must be 1..4096 bytes");
+            "state JSON must be 1..20480 bytes");
         return ESP_FAIL;
     }
 
@@ -4705,8 +4803,27 @@ static esp_err_t space_asset_post_handler(httpd_req_t *req)
     return send_json(req, "{\"ok\":true}");
 }
 
+static esp_err_t tracker_get_handler(httpd_req_t *req)
+{
+    cJSON *snapshot = strcmp(req->uri, "/api/launches") == 0 ? app_launches_json() : app_tracker_snapshot();
+    char *body = cJSON_PrintUnformatted(snapshot);
+    cJSON_Delete(snapshot);
+    if (!body) return ESP_ERR_NO_MEM;
+    esp_err_t result = send_json(req, body);
+    cJSON_free(body);
+    return result;
+}
+
 static void register_handlers(httpd_handle_t handle)
 {
+    const httpd_uri_t launches_uri = {
+        .uri = "/api/launches", .method = HTTP_GET, .handler = tracker_get_handler,
+    };
+    httpd_register_uri_handler(handle, &launches_uri);
+    const httpd_uri_t tracker_uri = {
+        .uri = "/api/tracker", .method = HTTP_GET, .handler = tracker_get_handler,
+    };
+    httpd_register_uri_handler(handle, &tracker_uri);
     const httpd_uri_t status_uri = {
         .uri = "/api/status",
         .method = HTTP_GET,
@@ -4809,6 +4926,8 @@ static void mount_map_storage(void)
     usb_restore_interrupted_files();
     tracked_asset_manifest_load();
     load_persisted_tracked_state();
+    app_tracker_load();
+    app_launches_load();
     refresh_map_storage_index(false);
     refresh_space_asset_valid_mask();
     refresh_weather_city_icon_valid_mask();
@@ -4828,10 +4947,14 @@ static void remote_task(void *arg)
             httpd_config_t config = HTTPD_DEFAULT_CONFIG();
             config.server_port = 80;
             config.ctrl_port = 32768;
-            config.stack_size = 12288;
+            /* Full queue validation/publication is deeper than a single
+             * screen update. Match USB's stack budget without consuming
+             * the internal RAM needed by TLS and display DMA. */
+            config.stack_size = 24576;
+            config.task_caps = MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT;
             config.max_open_sockets = 2;
             config.backlog_conn = 2;
-            config.max_uri_handlers = 11;
+            config.max_uri_handlers = 14;
             config.recv_wait_timeout = 15;
             config.send_wait_timeout = 15;
             config.lru_purge_enable = true;
@@ -4848,6 +4971,8 @@ static void remote_task(void *arg)
 
 void app_remote_start(void)
 {
+    app_tracker_start();
+    app_launches_start();
     if (status_mutex == NULL) {
         status_mutex = xSemaphoreCreateMutex();
     }
@@ -4884,6 +5009,52 @@ void app_remote_get_status(app_remote_status_t *out)
         return;
     }
     read_status_into(out);
+}
+
+void app_remote_publish_tracker(const app_remote_status_t *flight, bool owns_updates)
+{
+    if (!flight || ensure_status_storage() == NULL) return;
+    xSemaphoreTake(status_mutex, portMAX_DELAY);
+    app_remote_status_t next = *status;
+    copy_tracker_fields(&next, flight);
+    bool geometry_changed = next.tracked_flight_slot != status->tracked_flight_slot ||
+        next.tracked_route_point_count != status->tracked_route_point_count ||
+        memcmp(next.tracked_route_points, status->tracked_route_points, sizeof(next.tracked_route_points)) != 0;
+    next.tracked_route_geometry_version = status->tracked_route_geometry_version + (geometry_changed ? 1 : 0);
+    tracker_owns_display = owns_updates;
+    if (memcmp(&next, status, sizeof(next)) != 0) {
+        if (geometry_changed) {
+            next.route_map_valid_mask = route_map_valid_mask_for_slot(next.tracked_flight_slot);
+            next.route_flag_valid_mask = route_flag_valid_mask_for_slot(next.tracked_flight_slot);
+            next.map_valid = next.route_map_valid_mask != 0;
+            next.map_bytes = next.map_valid ? APP_REMOTE_MAP_BYTES : 0;
+            next.map_revision++;
+            next.route_flag_revision++;
+            route_flag_loaded_revision[0] = UINT32_MAX;
+            route_flag_loaded_revision[1] = UINT32_MAX;
+        }
+        next.revision++;
+        *status = next;
+    }
+    xSemaphoreGive(status_mutex);
+}
+
+void app_remote_publish_launches(const app_remote_launch_t launches[3], uint8_t mask)
+{
+    if (!launches || !ensure_status_storage() || !status_mutex) return;
+    xSemaphoreTake(status_mutex, portMAX_DELAY);
+    launches_own_display = true;
+    if (status->launch_option_mask != mask || memcmp(status->launch_options, launches, sizeof(status->launch_options))) {
+        memcpy(status->launch_options, launches, sizeof(status->launch_options));
+        status->launch_option_mask = mask;
+        int first = -1;
+        for (int a = 0; a < 3; a++) if ((mask & (1U << a)) &&
+            (first < 0 || launches[a].net_unix < launches[first].net_unix)) first = a;
+        if (first >= 0) copy_launch_option_to_legacy(&launches[first], status);
+        else status->launch_valid = false;
+        status->revision++;
+    }
+    xSemaphoreGive(status_mutex);
 }
 
 bool app_remote_get_launch_status(
