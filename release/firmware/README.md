@@ -8,7 +8,7 @@ These binaries target the **Waveshare ESP32-S3-Touch-AMOLED-1.75C** with 32 MB f
 |---:|---|---|
 | `0x0000` | `bootloader.bin` | ESP32-S3 bootloader |
 | `0x8000` | `partition-table.bin` | AirESP32ace partition layout |
-| `0x10000` | `AirESP32ace_181126_v01.bin` | v0.1.3 main application |
+| `0x10000` | `AirESP32ace_181126_v02.bin` | v0.1.4 main application |
 
 ## First installation
 
@@ -19,14 +19,14 @@ esptool.py --chip esp32s3 \
   --port /dev/cu.usbmodemXXXX \
   --baud 460800 \
   --before default_reset \
-  --after hard_reset \
+  --after watchdog_reset \
   write_flash \
   --flash_mode dio \
   --flash_freq 80m \
   --flash_size 32MB \
   0x0000 bootloader.bin \
   0x8000 partition-table.bin \
-  0x10000 AirESP32ace_181126_v01.bin
+  0x10000 AirESP32ace_181126_v02.bin
 ```
 
 If automatic download mode fails, hold the lower BOOT button while starting the flash, then release it once the serial connection begins.
@@ -37,12 +37,12 @@ When the bootloader and partition table are already installed, only the applicat
 
 ```bash
 esptool.py --chip esp32s3 --port /dev/cu.usbmodemXXXX \
-  write_flash 0x10000 AirESP32ace_181126_v01.bin
+  --after watchdog_reset write_flash 0x10000 AirESP32ace_181126_v02.bin
 ```
 
 The companion's firmware panel can perform the same application update after it confirms the connected USB device.
 
-The application-only update preserves existing configuration and stored assets. Use the matching v0.1.3 companion. This release fixes FlightAware validation for active Personal-tier keys by using the no-cost account-usage endpoint instead of the tier-restricted alerts endpoint. Changed keys are revalidated asynchronously. It also adds storage-capacity diagnostics and cleanup of retired 5/100-mile radar cache files while preserving live maps, plus stronger flight-queue verification. Autonomous tracking/launch updates remain device-owned. See [autonomous space launches](../../docs/autonomous-space-launches.md) for the underlying provider policy.
+The application-only update preserves existing configuration and stored assets. Use the matching v0.1.4 companion, then Sync existing flights once to repair missing city labels. All Tracker views use the prescribed cities; the device accepts corrected static labels without resetting live flight progress. The Mac's worldwide reference is not linked into firmware. Preflight telemetry is cleared, direct Details/Dock rendering respects the one-hour countdown gate, and confirmed delays update the countdown. Device schedule checks run every six hours far ahead, hourly within 24 hours, and every ten minutes within two hours. Earlier FlightAware validation and setup fixes remain included. See [autonomous flight tracking](../../docs/autonomous-flight-tracking.md).
 
 ## Configuration
 

@@ -1,0 +1,18 @@
+Airport city reference data
+
+Source: OurAirports, https://ourairports.com/data/
+Data dictionary: https://ourairports.com/help/data-dictionary.html
+Downloaded November 18, 2026. Public domain; no accuracy warranty.
+
+AirportCities.json is a reduced offline fallback, not a live status source.
+It covers unambiguous IATA and ICAO codes for open airports with a known
+primary municipality. GPS/local identifiers and closed airports are excluded.
+Parenthetical locality qualifiers are omitted for compact display labels.
+Provider city names take precedence. Unknown codes, country mismatches, and
+locations more than 100 km from the reference are not guessed.
+
+The source SHA-256 is embedded in the JSON. Regenerate with
+scripts/generate_airport_city_catalog.py and a fresh OurAirports airports.csv.
+This dataset is shipped only with the Mac app. Resolved labels are included
+in each prescribed flight and persist on the device; no extra API calls,
+firmware-linked database, or changes to the eight device cities are needed.

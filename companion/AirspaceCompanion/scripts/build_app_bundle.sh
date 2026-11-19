@@ -8,7 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PACKAGE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 REPOSITORY_DIR="$(cd "$PACKAGE_DIR/../.." && pwd)"
 APP_NAME="AirESP32ace"
-FIRMWARE_RELEASE_NAME="AirESP32ace_181126_v01.bin"
+FIRMWARE_RELEASE_NAME="AirESP32ace_181126_v02.bin"
 BUNDLE_ID="com.vadimmalis.airspace-companion"
 RENDERER_ID="$BUNDLE_ID.renderer"
 BUILD_CONFIG="${1:-debug}"
@@ -65,10 +65,11 @@ env DEVELOPER_DIR="$BUILD_DEVELOPER_DIR" \
   "${SWIFT_BUILD_ARGS[@]}"
 
 BINARY_DIR=".build/arm64-apple-macosx/$BUILD_CONFIG"
-PRODUCT_DIR="$BINARY_DIR"
-if [[ -n "$SWIFT_SCRATCH_PATH" ]]; then
-  PRODUCT_DIR="$SWIFT_SCRATCH_PATH/arm64-apple-macosx/$BUILD_CONFIG"
-fi
+# Newer Swift toolchains default to Swift Build and use out/Products, while
+# older SwiftPM uses the target-triple directory. Never package a stale binary
+# left in the old location after a toolchain upgrade.
+PRODUCT_DIR="$(env DEVELOPER_DIR="$BUILD_DEVELOPER_DIR" \
+  "$BUILD_SWIFT" "${SWIFT_BUILD_ARGS[@]}" --show-bin-path)"
 BINARY_PATH="$PRODUCT_DIR/AirESP32ace"
 APP_PATH="$BINARY_DIR/$APP_NAME.app"
 CONTENTS_PATH="$APP_PATH/Contents"
@@ -94,6 +95,11 @@ fi
 # Keep nested resources in the standard macOS location. AppResources resolves
 # this packaged location before using SwiftPM's build-directory fallback.
 cp -R "$RESOURCE_BUNDLE" "$RESOURCES_PATH/"
+if [[ ! -f "$RESOURCE_BUNDLE/AirportCities.json" && \
+      ! -f "$RESOURCE_BUNDLE/Contents/Resources/AirportCities.json" ]]; then
+  echo "error: newly built resource bundle is missing the airport city catalog" >&2
+  exit 1
+fi
 
 cp \
   "$NATIVE_BUILD_DIR/libAirspaceRenderer.dylib" \
@@ -153,9 +159,9 @@ cat > "$CONTENTS_PATH/Info.plist" <<PLIST
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
-  <string>0.1.3</string>
+  <string>0.1.4</string>
   <key>CFBundleVersion</key>
-  <string>4</string>
+  <string>5</string>
   <key>LSMinimumSystemVersion</key>
   <string>15.0</string>
   <key>LSApplicationCategoryType</key>

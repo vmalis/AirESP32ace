@@ -13,6 +13,15 @@ struct Airport: Identifiable, Hashable, Codable {
     var countryCode: String? = nil
     var timeZoneIdentifier: String? = nil
 
+    /// Some airport-provider tiers omit `city`. Keep older saved plans usable
+    /// without another provider request or adding a Radar city to the device.
+    var displayCity: String {
+        let value = city.trimmingCharacters(in: .whitespacesAndNewlines)
+        let airportCode = code.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        if !value.isEmpty && value.uppercased() != airportCode { return value }
+        return AirportCityCatalog.city(for: self) ?? ""
+    }
+
     static let icn = Airport(
         code: "ICN",
         name: "Incheon International",
@@ -78,8 +87,8 @@ struct TrackedFlight: Identifiable, Hashable, Codable {
     let distanceSummary: String
     let liveStatusSummary: String
     let dataSourceSummary: String
-    let routeProgress: Double?
-    let lastPosition: CLLocationCoordinate2D?
+    var routeProgress: Double?
+    var lastPosition: CLLocationCoordinate2D?
     let lastUpdated: Date?
     var altitudeMeters: Int? = nil
     var groundSpeedKPH: Int? = nil
@@ -148,6 +157,21 @@ struct TrackedFlight: Identifiable, Hashable, Codable {
 }
 
 extension TrackedFlight {
+    // Match tracked_should_show_countdown in the shared device renderer.
+    static let livePresentationLeadInterval: TimeInterval = 3600
+
+    func showsScheduledCountdown(at now: Date = Date()) -> Bool {
+        guard journeyPhase(at: now) == "preflight",
+              let departure = estimatedDeparture ?? scheduledDeparture else { return false }
+        return departure.timeIntervalSince(now) > Self.livePresentationLeadInterval
+    }
+
+    var isDepartureDelayed: Bool {
+        if liveStatusSummary.localizedCaseInsensitiveContains("delay") { return true }
+        guard let scheduledDeparture, let estimatedDeparture else { return false }
+        return estimatedDeparture.timeIntervalSince(scheduledDeparture) > 60
+    }
+
     static let postArrivalRetentionInterval: TimeInterval = 2 * 3600
     static let endpointArrivalGraceInterval: TimeInterval = 30 * 60
     static let unconfirmedArrivalTimeoutInterval: TimeInterval = 24 * 3600
@@ -208,7 +232,20 @@ extension TrackedFlight {
     /// cached, rendered, or sent to the instrument.  Every tracked-flight view
     /// therefore receives the same landed state.
     func reconciledTerminalState(at now: Date = Date()) -> TrackedFlight {
-        guard journeyPhase(at: now) == "arrived" else { return self }
+        let phase = journeyPhase(at: now)
+        if phase == "preflight" {
+            // A future occurrence must not inherit today's aircraft motion
+            // from a callsign/airframe lookup or an older persisted snapshot.
+            var scheduled = self
+            scheduled.routeProgress = 0
+            scheduled.lastPosition = nil
+            scheduled.altitudeMeters = nil
+            scheduled.groundSpeedKPH = nil
+            scheduled.headingDegrees = nil
+            scheduled.verticalPhase = nil
+            return scheduled
+        }
+        guard phase == "arrived" else { return self }
         let normalizedStatus = liveStatusSummary.lowercased()
         let hasExplicitTerminalStatus =
             normalizedStatus.contains("arrived") ||

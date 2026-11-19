@@ -32,6 +32,16 @@ enum DevicePreviewPage: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
+    var isTrackedFlight: Bool {
+        self == .flightGlobe || self == .flightFrame || self == .flightDetail
+    }
+
+    static func trackerPages(for flight: TrackedFlight?, at now: Date) -> [Self] {
+        guard let flight, !flight.isExpiredAfterArrival(at: now),
+              !flight.showsScheduledCountdown(at: now) else { return [.flightGlobe] }
+        return [.flightGlobe, .flightFrame, .flightDetail]
+    }
+
     var title: String {
         switch self {
         case .radarMain: "Nearby Radar"
@@ -178,6 +188,10 @@ struct InstrumentPreview: View {
             )
             .background(.black)
             .clipShape(Circle())
+        } else if page.isTrackedFlight && flight.showsScheduledCountdown() {
+            ScheduledFlightCountdownTwin(flight: flight, accent: accent.previewBrightColor)
+                .background(.black)
+                .clipShape(Circle())
         } else {
             instrumentSurface
         }
@@ -1142,6 +1156,47 @@ private struct CloseSettingsGlyph: View {
     }
 }
 
+/// Keep the no-native-renderer fallback honest too; never substitute an
+/// airborne mockup while the real instrument is still counting down.
+private struct ScheduledFlightCountdownTwin: View {
+    let flight: TrackedFlight
+    let accent: Color
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 30)) { context in
+            let departure = flight.estimatedDeparture ?? flight.scheduledDeparture ?? context.date
+            let minutes = max(0, Int(ceil(departure.timeIntervalSince(context.date) / 60)))
+            VStack(spacing: 20) {
+                Text(flight.marketingNumber).font(.system(size: 18))
+                HStack(spacing: 40) {
+                    endpoint(flight.origin)
+                    Text("> ").foregroundStyle(.secondary)
+                    endpoint(flight.destination)
+                }
+                Text(flight.isDepartureDelayed ? "DELAYED - DEPARTS IN" : "DEPARTS IN")
+                    .font(.system(size: 12))
+                    .foregroundStyle(flight.isDepartureDelayed ? .yellow : .secondary)
+                if minutes >= 1440 {
+                    Text("\(minutes / 1440)").font(.system(size: 48)).foregroundStyle(accent)
+                    Text("DAYS").font(.system(size: 14)).foregroundStyle(.secondary)
+                }
+                Text(String(format: "%02d:%02d", (minutes % 1440) / 60, minutes % 60))
+                    .font(.system(size: minutes >= 1440 ? 24 : 48)).foregroundStyle(accent)
+                Text("HOURS : MINUTES").font(.system(size: 12)).foregroundStyle(.secondary)
+            }
+            .foregroundStyle(.white)
+            .frame(width: 466, height: 466)
+        }
+    }
+
+    private func endpoint(_ airport: Airport) -> some View {
+        VStack(spacing: 4) {
+            Text(airport.code).font(.system(size: 28))
+            Text(airport.displayCity).font(.system(size: 14)).foregroundStyle(.secondary)
+        }
+    }
+}
+
 private struct FlightMapTwin: View {
     let flight: TrackedFlight
     let mapImage: NSImage?
@@ -1190,7 +1245,7 @@ private struct FlightMapTwin: View {
                     )
                     EndpointTwin(
                         code: flight.destination.code,
-                        city: flight.destination.city,
+                        city: flight.destination.displayCity,
                         alignment: .center
                     )
                     .frame(width: proxy.size.width * 0.34)
@@ -1204,7 +1259,7 @@ private struct FlightMapTwin: View {
                     )
                     EndpointTwin(
                         code: flight.origin.code,
-                        city: flight.origin.city,
+                        city: flight.origin.displayCity,
                         alignment: .center
                     )
                     .frame(width: proxy.size.width * 0.34)
@@ -1220,7 +1275,7 @@ private struct FlightMapTwin: View {
                     FlightGlobePanelsTwin(flight: flight, accent: accent)
                     EndpointTwin(
                         code: flight.origin.code,
-                        city: flight.origin.city,
+                        city: flight.origin.displayCity,
                         alignment: .center
                     )
                     .frame(width: proxy.size.width * (126.0 / 466.0))
@@ -1234,7 +1289,7 @@ private struct FlightMapTwin: View {
                     )
                     EndpointTwin(
                         code: flight.destination.code,
-                        city: flight.destination.city,
+                        city: flight.destination.displayCity,
                         alignment: .center
                     )
                     .frame(width: proxy.size.width * (126.0 / 466.0))
@@ -1829,13 +1884,13 @@ private struct RouteDetailTwin: View {
             HStack {
                 RouteEndpointFlagTwin(
                     code: flight.origin.code,
-                    city: flight.origin.city,
+                    city: flight.origin.displayCity,
                     country: flight.origin.countryCode
                 )
                 Spacer()
                 RouteEndpointFlagTwin(
                     code: flight.destination.code,
-                    city: flight.destination.city,
+                    city: flight.destination.displayCity,
                     country: flight.destination.countryCode
                 )
             }

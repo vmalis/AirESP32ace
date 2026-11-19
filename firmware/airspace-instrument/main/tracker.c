@@ -222,15 +222,7 @@ bool app_tracker_install(const cJSON *root)
                 !strcmp(n->display.tracked_flight_destination,
                         old->display.tracked_flight_destination) &&
                 (!*n->provider_id || !strcmp(n->provider_id, old->provider_id))) {
-                /* Re-syncing assets cannot rewind a running occurrence. */
-                uint8_t slot = n->display.tracked_flight_slot;
-                int16_t points[APP_REMOTE_TRACKED_ROUTE_MAX_POINTS][2];
-                memcpy(points, n->display.tracked_route_points, sizeof(points));
-                uint8_t count = n->display.tracked_route_point_count;
-                *n = *old;
-                n->display.tracked_flight_slot = slot;
-                memcpy(n->display.tracked_route_points, points, sizeof(points));
-                n->display.tracked_route_point_count = count;
+                app_tracker_preserve_runtime(n, old);
             }
         }
     int prior = -1;
@@ -491,10 +483,10 @@ void app_tracker_tick(void)
     app_config_t cfg;
     app_config_get(&cfg);
     bool changed = false;
-    if (now >= f.next_schedule && f.scheduled_departure - now <= 86400 &&
-        !app_tracker_terminal(&f)) {
+    if (app_tracker_schedule_due(&f, now)) {
         f.next_schedule = now + app_tracker_schedule_interval(&f, now);
-        schedule(&f, &cfg, now);
+        if (schedule(&f, &cfg, now))
+            f.checked_unix = time(NULL);
         changed = true;
     }
     bool near_departure = now >= f.scheduled_departure - 600;
@@ -555,6 +547,10 @@ cJSON *app_tracker_snapshot(void)
         app_remote_status_t *d = &f->display;
         cJSON_AddStringToObject(root, "planId", f->plan_id);
         cJSON_AddStringToObject(root, "flightNumber", d->tracked_flight_number);
+        cJSON_AddStringToObject(root, "origin", d->tracked_flight_origin);
+        cJSON_AddStringToObject(root, "originCity", d->tracked_flight_origin_city);
+        cJSON_AddStringToObject(root, "destination", d->tracked_flight_destination);
+        cJSON_AddStringToObject(root, "destinationCity", d->tracked_flight_destination_city);
         cJSON_AddStringToObject(root, "status", d->tracked_flight_status);
         cJSON_AddStringToObject(root, "journeyPhase", d->tracked_flight_journey_phase);
         cJSON_AddStringToObject(root, "source", f->source);

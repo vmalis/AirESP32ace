@@ -228,7 +228,7 @@ static const airport_city_fallback_t airport_city_fallbacks[] = {
     {"LAS", "Las Vegas"}, {"LAX", "Los Angeles"}, {"LED", "St. Petersburg"},
     {"LGA", "New York"}, {"LHR", "London"}, {"LIH", "Lihue"},
     {"MAD", "Madrid"}, {"MCO", "Orlando"}, {"MEX", "Mexico City"},
-    {"MIA", "Miami"}, {"MSP", "Minneapolis"}, {"NRT", "Tokyo"},
+    {"MIA", "Miami"}, {"MSP", "Minneapolis"}, {"MUC", "Munich"}, {"NRT", "Tokyo"},
     {"OAK", "Oakland"}, {"OGG", "Kahului"}, {"ORD", "Chicago"},
     {"PDX", "Portland"}, {"PHX", "Phoenix"}, {"SAN", "San Diego"},
     {"SEA", "Seattle"}, {"SFO", "San Francisco"}, {"SIN", "Singapore"},

@@ -2,12 +2,18 @@
 // Created by VM, August 2026
 import Foundation
 
+// Standalone smoke-test resource location; the production app uses its bundle.
+enum AppResources {
+    static let bundle = Bundle(path: CommandLine.arguments[1])!
+}
+
 @main
 struct CityCatalogSmoke {
     static func main() throws {
         precondition(RadarLocationPreset.all.count == 8)
         precondition(RadarLocationPreset.catalog.count == 10)
         precondition(Set(RadarLocationPreset.catalog.map(\.key)).count == 10)
+        precondition(AirportCityCatalog.entries.count > 18_000)
         for (key, metar) in [("CLT", "KCLT"), ("CAE", "KCAE")] {
             let city = RadarLocationPreset.preset(for: key)!
             precondition(city.metar == metar)

@@ -778,12 +778,10 @@ struct FlightAwareFlightStatusProvider:
             response.codeIATA ??
             response.codeICAO ??
             normalized
-        let city =
-            aeroAirport.city ??
-            response.city ??
-            aeroAirport.name ??
-            response.name ??
-            ""
+        // An airport's proper name (e.g. John F. Kennedy) is not its city.
+        let city = [aeroAirport.city, response.city].compactMap { $0 }
+            .map { Self.displayCity($0, airportCode: displayCode) }
+            .first(where: { !$0.isEmpty }) ?? ""
         let airport = Airport(
             code: displayCode,
             name: aeroAirport.name ?? response.name ?? normalized,

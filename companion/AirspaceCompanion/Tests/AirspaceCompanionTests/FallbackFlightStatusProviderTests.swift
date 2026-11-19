@@ -6,6 +6,46 @@ import XCTest
 @testable import AirspaceCompanion
 
 final class FallbackFlightStatusProviderTests: XCTestCase {
+    func testFutureAirLabsOccurrenceDoesNotFetchOrInheritLiveMotion() async throws {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [FlightFallbackURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        FlightFallbackURLProtocol.handler = { request in
+            if request.url?.path.hasSuffix("/flight") == true {
+                return Self.jsonResponse(request, object: ["response": [
+                    "flight_iata": "LH9459", "flight_icao": "DLH9459", "airline_iata": "LH",
+                    "dep_iata": "SFO", "arr_iata": "MUC", "hex": "abcdef",
+                    "status": "en-route", "lat": 40, "lng": -110,
+                    "alt": 5193, "speed": 750, "dir": 45, "v_speed": 4,
+                    "dep_time_ts": now.addingTimeInterval(48 * 3600).timeIntervalSince1970,
+                    "arr_time_ts": now.addingTimeInterval(59 * 3600).timeIntervalSince1970,
+                ]])
+            }
+            if request.url?.path.hasSuffix("/airports") == true {
+                return Self.jsonResponse(request, object: ["response": [[
+                    "iata_code": "MUC", "name": "Munich International Airport",
+                    "lat": 48.3538, "lng": 11.7861, "country_code": "DE",
+                    "timezone": "Europe/Berlin",
+                ]]])
+            }
+            XCTFail("A future occurrence must not request live aircraft telemetry")
+            return Self.jsonResponse(request, object: ["response": [], "states": []])
+        }
+        let flight = try await AirLabsOpenSkyFlightStatusProvider(
+            apiKey: "airlabs-scheduled-snapshot-test", openSkyClientID: "",
+            openSkyClientSecret: "", session: session, now: { now }
+        ).trackedFlight(for: "LH9459", on: nil)
+        XCTAssertEqual(flight.destination.displayCity, "Munich")
+        XCTAssertEqual(flight.journeyPhase(at: now), "preflight")
+        XCTAssertEqual(flight.routeProgress, 0)
+        XCTAssertNil(flight.lastPosition)
+        XCTAssertNil(flight.altitudeMeters)
+        XCTAssertNil(flight.groundSpeedKPH)
+        XCTAssertNil(flight.headingDegrees)
+        XCTAssertNil(flight.verticalPhase)
+    }
+
     func testFallsBackWhenFlightAwareFails() async throws {
         let provider = FallbackFlightStatusProvider(
             primary: ThrowingFlightProvider(),

@@ -503,13 +503,14 @@ struct DeviceClient: Sendable {
         trackingActive: Bool = true,
         deviceSlot: Int = 0
     ) throws -> Data {
+        let flight = flight.reconciledTerminalState()
         let airlineIata = String(
             flight.marketingNumber
                 .trimmingCharacters(in: .whitespacesAndNewlines)
                 .uppercased()
                 .prefix(2)
         )
-        let delayed = flight.liveStatusSummary.localizedCaseInsensitiveContains("delay")
+        let delayed = flight.isDepartureDelayed
         let now = Date()
         let originTimeZone = flight.origin.timeZoneIdentifier.flatMap(
             TimeZone.init(identifier:)
@@ -536,7 +537,7 @@ struct DeviceClient: Sendable {
             style: style.rawValue,
             deviceSlot: max(0, min(3, deviceSlot)),
             trackingActive: trackingActive,
-            routeProgress: routeProgress,
+            routeProgress: flight.journeyPhase == "preflight" ? 0 : routeProgress,
             routePoints: routePoints,
             flight: .init(
                 number: flight.marketingNumber,
@@ -546,10 +547,10 @@ struct DeviceClient: Sendable {
                 aircraftType: flight.aircraftType,
                 aircraftTypeCode: flight.aircraftTypeCode,
                 origin: flight.origin.code,
-                originCity: flight.origin.city,
+                originCity: flight.origin.displayCity,
                 originCountryCode: flight.origin.countryCode,
                 destination: flight.destination.code,
-                destinationCity: flight.destination.city,
+                destinationCity: flight.destination.displayCity,
                 destinationCountryCode: flight.destination.countryCode,
                 originTerminal: flight.originTerminal,
                 originGate: flight.originGate,

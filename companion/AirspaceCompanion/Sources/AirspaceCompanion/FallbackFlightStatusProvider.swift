@@ -783,6 +783,9 @@ struct AirLabsOpenSkyFlightStatusProvider: FlightLegProviding {
             marketingNumber: marketingNumber
         )
 
+        let status = Self.effectiveStatus(record, now: refreshNow)
+        let isAirborne = status == "enroute"
+        let isArrived = status == "arrived"
         let preliminaryProgress = routeProgress(
             record: record,
             position: record.coordinate,
@@ -794,9 +797,9 @@ struct AirLabsOpenSkyFlightStatusProvider: FlightLegProviding {
             destination: destination,
             progress: preliminaryProgress
         )
-        var openSky = await openSkyState(for: record.hex)
-        if openSky == nil,
-           Self.normalizedStatus(record.status) == "enroute" {
+        var openSky: OpenSkyFlightState? = nil
+        if isAirborne { openSky = await openSkyState(for: record.hex) }
+        if isAirborne && openSky == nil {
             let callsigns = [
                 record.flightICAO,
                 record.codeshareFlightICAO,
@@ -814,25 +817,22 @@ struct AirLabsOpenSkyFlightStatusProvider: FlightLegProviding {
          * while omitting motion fields over sparse ADS-B coverage.  Only
          * after OpenSky misses do we spend the final fallback request on the
          * live flights endpoint. */
-        let liveAirLabs: AirLabsFlightRecord? = if openSky == nil &&
+        let liveAirLabs: AirLabsFlightRecord? = if isAirborne && openSky == nil &&
             Self.missingMotionTelemetry(record) {
             await liveAirLabsState(normalized, expected: record)
         } else {
             nil
         }
 
-        let position = openSky?.coordinate ??
+        let position = isAirborne ? (openSky?.coordinate ??
             liveAirLabs?.coordinate ??
-            record.coordinate
-        let progress = routeProgress(
+            record.coordinate) : nil
+        let progress = isAirborne ? routeProgress(
             record: record,
             position: position,
             origin: origin,
             destination: destination
-        )
-        let status = Self.effectiveStatus(record, now: now())
-        let isAirborne = status == "enroute"
-        let isArrived = status == "arrived"
+        ) : (isArrived ? 1 : 0)
         let scheduledDeparture = record.departureScheduled
         let estimatedDeparture = record.departureEstimated ?? scheduledDeparture
         let actualDeparture = record.departureActual ?? (
@@ -861,18 +861,18 @@ struct AirLabsOpenSkyFlightStatusProvider: FlightLegProviding {
             liveAirLabs?.updated ??
             record.updated ??
             now()
-        let altitude = openSky?.altitudeMeters ??
+        let altitude = isAirborne ? (openSky?.altitudeMeters ??
             liveAirLabs?.altitudeMeters ??
-            record.altitudeMeters
-        let speed = openSky?.groundSpeedKPH ??
+            record.altitudeMeters) : nil
+        let speed = isAirborne ? (openSky?.groundSpeedKPH ??
             liveAirLabs?.groundSpeedKPH ??
-            record.groundSpeedKPH
-        let heading = openSky?.headingDegrees ??
+            record.groundSpeedKPH) : nil
+        let heading = isAirborne ? (openSky?.headingDegrees ??
             liveAirLabs?.headingDegrees ??
-            record.headingDegrees
-        let verticalRate = openSky?.verticalRateMPS ??
+            record.headingDegrees) : nil
+        let verticalRate = isAirborne ? (openSky?.verticalRateMPS ??
             liveAirLabs?.verticalRateMPS ??
-            record.verticalRateMPS
+            record.verticalRateMPS) : nil
         let durationSeconds = Self.durationSeconds(
             record: record,
             departure: actualDeparture ?? estimatedDeparture,
@@ -1468,7 +1468,12 @@ struct AirLabsOpenSkyFlightStatusProvider: FlightLegProviding {
             value: "name,iata_code,icao_code,lat,lng,city,timezone,country_code"
         ))
         let rows = try await airLabsArray(path: "airports", queryItems: items)
-        guard let row = rows.first,
+        guard let row = rows.first(where: { row in
+            if let normalizedIATA, !normalizedIATA.isEmpty {
+                return Self.string(row["iata_code"])?.uppercased() == normalizedIATA
+            }
+            return Self.string(row["icao_code"])?.uppercased() == normalizedICAO
+        }),
               let latitude = Self.double(row["lat"]),
               let longitude = Self.double(row["lng"])
         else {

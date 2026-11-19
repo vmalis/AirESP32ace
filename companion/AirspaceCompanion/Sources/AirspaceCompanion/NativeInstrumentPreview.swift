@@ -1030,6 +1030,7 @@ private final class NativeInstrumentRenderer {
         }
 
         setAccent?(accent.nativeRendererIndex)
+        let flight = flight.reconciledTerminalState()
         let normalizedLocationKey = locationKey
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .uppercased()
@@ -1068,9 +1069,9 @@ private final class NativeInstrumentRenderer {
             flight.airlineName,
             aircraftType,
             flight.origin.code,
-            flight.origin.city,
+            flight.origin.displayCity,
             flight.destination.code,
-            flight.destination.city,
+            flight.destination.displayCity,
             flight.originTerminal ?? "",
             flight.originGate ?? "",
             flight.destinationTerminal ?? "",
@@ -1096,7 +1097,7 @@ private final class NativeInstrumentRenderer {
             UnsafePointer(cStrings[10]),
             UnsafePointer(cStrings[11]),
             UnsafePointer(cStrings[12]),
-            Float(routeProgress),
+            Float(flight.journeyPhase == "preflight" ? 0 : routeProgress),
             Int32(flight.altitudeMeters ?? 0),
             Int32(flight.groundSpeedKPH ?? 0),
             Int32(flight.headingDegrees ?? -1)
@@ -1147,8 +1148,7 @@ private final class NativeInstrumentRenderer {
             UnsafePointer(timingStrings[5]),
             UnsafePointer(timingStrings[6]),
             UnsafePointer(timingStrings[7]),
-            flight.liveStatusSummary
-                .localizedCaseInsensitiveContains("delay"),
+            flight.isDepartureDelayed,
             Int32(flight.routeDistanceKilometers ?? 0),
             Int32(
                 originTimeZone?

@@ -33,6 +33,26 @@ static double clamp(double v, double lo, double hi)
     return fmax(lo, fmin(hi, v));
 }
 
+/* Caller has matched the same occurrence. Preserve live device-owned state,
+ * but accept repaired static labels and newly prepared map geometry. */
+void app_tracker_preserve_runtime(app_tracker_flight_t *next, const app_tracker_flight_t *old)
+{
+    uint8_t slot = next->display.tracked_flight_slot;
+    int16_t points[APP_REMOTE_TRACKED_ROUTE_MAX_POINTS][2];
+    memcpy(points, next->display.tracked_route_points, sizeof(points));
+    uint8_t count = next->display.tracked_route_point_count;
+    char origin[sizeof(next->display.tracked_flight_origin_city)];
+    char destination[sizeof(next->display.tracked_flight_destination_city)];
+    memcpy(origin, next->display.tracked_flight_origin_city, sizeof(origin));
+    memcpy(destination, next->display.tracked_flight_destination_city, sizeof(destination));
+    *next = *old;
+    next->display.tracked_flight_slot = slot;
+    memcpy(next->display.tracked_route_points, points, sizeof(points));
+    next->display.tracked_route_point_count = count;
+    copy(next->display.tracked_flight_origin_city, sizeof(origin), origin);
+    copy(next->display.tracked_flight_destination_city, sizeof(destination), destination);
+}
+
 bool app_tracker_coordinates_valid(double lat, double lon)
 {
     return isfinite(lat) && isfinite(lon) && fabs(lat) <= 90 && fabs(lon) <= 180;
@@ -293,6 +313,10 @@ bool app_tracker_parse_schedule(app_tracker_flight_t *f, const cJSON *root, bool
     copy(d->tracked_flight_destination_gate, sizeof(d->tracked_flight_destination_gate),
          str(r, fa ? "gate_destination" : "arr_gate"));
     const char *status = str(r, "status");
+    d->tracked_flight_delayed =
+        (f->scheduled_departure > 0 &&
+         d->tracked_flight_estimated_departure_unix > f->scheduled_departure + 60) ||
+        !strncasecmp(status, "delay", 5);
     if (cJSON_IsTrue(get(r, "cancelled")) || !strcasecmp(status, "cancelled") ||
         !strcasecmp(status, "canceled")) {
         copy(d->tracked_flight_status, sizeof(d->tracked_flight_status), "Cancelled");
@@ -305,6 +329,10 @@ bool app_tracker_parse_schedule(app_tracker_flight_t *f, const cJSON *root, bool
     } else if (d->tracked_flight_actual_departure_unix > 0 || !strcasecmp(status, "en-route") ||
                !strcasecmp(status, "active")) {
         copy(d->tracked_flight_journey_phase, sizeof(d->tracked_flight_journey_phase), "enroute");
+    } else if (!app_tracker_airborne(f)) {
+        copy(d->tracked_flight_status, sizeof(d->tracked_flight_status),
+             d->tracked_flight_delayed ? "Delayed" : "Scheduled");
+        copy(f->source, sizeof(f->source), fa ? "FlightAware schedule" : "AirLabs schedule");
     }
     if (fa && !*f->provider_id)
         copy(f->provider_id, sizeof(f->provider_id), str(r, "fa_flight_id"));
@@ -335,6 +363,15 @@ void app_tracker_reconcile(app_tracker_flight_t *f, int64_t now)
     if (!app_tracker_airborne(f)) {
         f->estimated = false;
         d->route_progress = 0;
+        // Seed snapshots can contain another occurrence's airborne telemetry.
+        // Clear it on load/install too, before the preflight detail window opens.
+        d->tracked_flight_altitude_m = 0;
+        d->tracked_flight_speed_kph = 0;
+        d->tracked_flight_heading_deg = 0;
+        d->tracked_flight_heading_valid = false;
+        copy(d->tracked_flight_phase, sizeof(d->tracked_flight_phase), "unknown");
+        f->position_unix = f->contact_unix = 0;
+        f->position_progress = 0;
         return;
     }
     double p = f->position_progress;
@@ -380,6 +417,11 @@ int app_tracker_select(const app_tracker_flight_t *f, unsigned count, int curren
         return first;
     return arrived >= 0 ? arrived : first;
 }
+bool app_tracker_schedule_due(const app_tracker_flight_t *f, int64_t now)
+{
+    return f->display.tracked_flight_valid && !app_tracker_terminal(f) && now >= f->next_schedule;
+}
+
 int app_tracker_schedule_interval(const app_tracker_flight_t *f, int64_t now)
 {
     if (app_tracker_terminal(f))

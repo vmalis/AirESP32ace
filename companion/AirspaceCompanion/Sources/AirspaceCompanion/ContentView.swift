@@ -2838,6 +2838,11 @@ private struct DevicePreviewColumn: View {
     @ObservedObject var model: CompanionModel
     let section: CompanionPage
     @Binding var selection: Int
+    @State private var previewNow = Date()
+
+    private var countdownOnly: Bool {
+        model.hasFlightToTrack && model.trackedFlight.showsScheduledCountdown(at: previewNow)
+    }
 
     private struct LaunchPreviewItem {
         let page: DevicePreviewPage
@@ -2862,7 +2867,10 @@ private struct DevicePreviewColumn: View {
         case .radar:
             [.radarMain]
         case .tracker:
-            [.flightGlobe, .flightFrame, .flightDetail]
+            DevicePreviewPage.trackerPages(
+                for: model.hasFlightToTrack ? model.trackedFlight : nil,
+                at: previewNow
+            )
         case .weather:
             [.weatherCurrent, .weatherForecast, .weatherRadar]
         case .clock:
@@ -2884,7 +2892,8 @@ private struct DevicePreviewColumn: View {
     }
 
     private var selectedPage: DevicePreviewPage {
-        pages[min(max(0, selection), pages.count - 1)]
+        let page = pages[min(max(0, selection), pages.count - 1)]
+        return page.isTrackedFlight && countdownOnly ? .flightGlobe : page
     }
 
     private var selectedLaunch: TrackedLaunch {
@@ -2960,6 +2969,8 @@ private struct DevicePreviewColumn: View {
                     }
                 }
                 .frame(width: 410, height: 190)
+                .disabled(pages.count <= 1)
+                .opacity(pages.count <= 1 ? 0 : 1)
             }
             .frame(width: 410, height: 346)
 
@@ -2988,13 +2999,17 @@ private struct DevicePreviewColumn: View {
                 }
             }
             .frame(height: 16)
+            .disabled(pages.count <= 1)
+            .opacity(pages.count <= 1 ? 0 : 1)
 
             Text(
                 section == .tracker && !model.hasFlightToTrack
                     ? "ADD A FLIGHT TO ENABLE TRACKING"
                     : section == .dock
                         ? "DOCK MODE · CONTROLS LOCKED"
-                        : selectedPage.gestureHint
+                        : section == .tracker && countdownOnly
+                            ? "LIVE VIEWS UNLOCK 1 HOUR BEFORE DEPARTURE"
+                            : selectedPage.gestureHint
             )
                 .font(.system(size: 9, weight: .medium, design: .monospaced))
                 .tracking(0.8)
@@ -3049,9 +3064,13 @@ private struct DevicePreviewColumn: View {
         .onChange(of: pages.count) {
             selection = min(max(0, selection), max(0, pages.count - 1))
         }
+        .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) {
+            previewNow = $0
+        }
     }
 
     private var previewTitle: String {
+        if selectedPage.isTrackedFlight && countdownOnly { return "Departure Countdown" }
         if section == .launches {
             return "\(selectedLaunch.agency.displayName) · \(selectedPage.title)"
         }
@@ -3537,7 +3556,7 @@ private struct AirportBlock: View {
             Text(airport.code)
                 .font(.system(size: 30, weight: .semibold, design: .rounded))
                 .foregroundStyle(.white)
-            Text(airport.city)
+            Text(airport.displayCity)
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

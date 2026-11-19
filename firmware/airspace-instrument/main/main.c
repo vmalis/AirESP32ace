@@ -5946,6 +5946,11 @@ static void tracked_endpoint_text(lv_obj_t *parent,
                                   int width,
                                   lv_text_align_t align)
 {
+    char city_fallback[24] = {0};
+    if ((city == NULL || city[0] == '\0' || (code && !strcasecmp(city, code))) &&
+        app_data_get_airport_city(code, city_fallback, sizeof(city_fallback))) {
+        city = city_fallback;
+    }
     lv_obj_t *code_label = label_box(
         parent,
         code != NULL && code[0] != '\0' ? code : "-",
@@ -5984,6 +5989,11 @@ static void tracked_preflight_endpoint_text(lv_obj_t *parent,
                                             const char *city,
                                             int center_x)
 {
+    char city_fallback[24] = {0};
+    if ((city == NULL || city[0] == '\0' || (code && !strcasecmp(city, code))) &&
+        app_data_get_airport_city(code, city_fallback, sizeof(city_fallback))) {
+        city = city_fallback;
+    }
     const int width = 132;
     const int x = center_x - width / 2;
     lv_obj_t *code_label = label_box(
@@ -8856,9 +8866,9 @@ static void tracked_draw_scheduled_countdown(
 
     tracked_centered_label(
         screen_root,
-        "DEPARTS IN",
+        remote->tracked_flight_delayed ? "DELAYED - DEPARTS IN" : "DEPARTS IN",
         &lv_font_montserrat_12,
-        lv_color_hex(0x8d9891),
+        lv_color_hex(remote->tracked_flight_delayed ? 0xffb000 : 0x8d9891),
         33,
         198,
         400);
@@ -8900,14 +8910,9 @@ static void tracked_draw_scheduled_countdown(
         now > 0 ? now / 60 : -1;
 }
 
-static void render_tracked_flight(void)
+static void render_tracked_flight_snapshot(app_remote_status_t *remote)
 {
-    app_remote_status_t remote;
-    app_remote_get_status(&remote);
-    tracked_reconcile_terminal_snapshot(
-        &remote,
-        (int64_t)time(NULL));
-    if (!remote.tracked_flight_valid) {
+    if (!remote->tracked_flight_valid) {
         render_tracked_no_scheduled_flight();
         tracked_panels_entry_animation_pending = false;
         return;
@@ -8939,19 +8944,19 @@ static void render_tracked_flight(void)
             0,
             0);
     }
-    if (tracked_should_show_countdown(&remote)) {
-        tracked_draw_scheduled_countdown(&remote);
+    if (tracked_should_show_countdown(remote)) {
+        tracked_draw_scheduled_countdown(remote);
         tracked_panels_entry_animation_pending = false;
         return;
     }
 
-    tracked_update_metric_trends(&remote);
+    tracked_update_metric_trends(remote);
     const lv_color_t route_color =
         frame_view
             ? lv_color_hex(0xf1f4f2)
             : lv_color_hex(radar_palette_active->main);
     const lv_color_t eta_color =
-        remote.tracked_flight_delayed
+        remote->tracked_flight_delayed
             ? lv_color_hex(0xff686e)
             : lv_color_hex(0xf1f4f2);
     const lv_color_t altitude_color =
@@ -8959,27 +8964,25 @@ static void render_tracked_flight(void)
     const lv_color_t speed_color =
         tracked_trend_color(tracked_speed_trend);
     const float progress =
-        fminf(1.0f, fmaxf(0.0f, remote.route_progress));
-    tracked_prepare_time_rotation(&remote);
+        fminf(1.0f, fmaxf(0.0f, remote->route_progress));
+    tracked_prepare_time_rotation(remote);
     const bool imperial = display_prefers_imperial();
     char distance_km[20] = "-";
     char distance_mi[20] = "-";
     char distance_from_km[20] = "-";
     char distance_from_mi[20] = "-";
-    if (remote.tracked_flight_route_distance_km > 0) {
+    if (remote->tracked_flight_route_distance_km > 0) {
         const int distance_from =
             (int)lroundf(
-                (float)remote
-                    .tracked_flight_route_distance_km *
+                (float)remote->tracked_flight_route_distance_km *
                 progress);
         const int distance_left =
             (int)lroundf(
-                (float)remote
-                    .tracked_flight_route_distance_km *
+                (float)remote->tracked_flight_route_distance_km *
                 (1.0f - progress));
         snprintf(
-            remote.tracked_flight_distance,
-            sizeof(remote.tracked_flight_distance),
+            remote->tracked_flight_distance,
+            sizeof(remote->tracked_flight_distance),
             "%d km",
             distance_left);
         snprintf(
@@ -9008,9 +9011,9 @@ static void render_tracked_flight(void)
         tracked_copy_or_dash(
             distance_km,
             sizeof(distance_km),
-            remote.tracked_flight_distance);
+            remote->tracked_flight_distance);
         int fallback_distance_km = -1;
-        if (sscanf(remote.tracked_flight_distance,
+        if (sscanf(remote->tracked_flight_distance,
                    "%d",
                    &fallback_distance_km) == 1 &&
             fallback_distance_km >= 0) {
@@ -9023,7 +9026,7 @@ static void render_tracked_flight(void)
             tracked_copy_or_dash(
                 distance_mi,
                 sizeof(distance_mi),
-                remote.tracked_flight_distance);
+                remote->tracked_flight_distance);
         }
     }
     const char *distance_preferred =
@@ -9032,40 +9035,40 @@ static void render_tracked_flight(void)
         imperial ? distance_km : distance_mi;
     const char *distance_from_preferred =
         imperial ? distance_from_mi : distance_from_km;
-    tracked_prepare_route_geometry(&remote, frame_view);
+    tracked_prepare_route_geometry(remote, frame_view);
     tracked_draw_route(
         progress,
         route_color,
         frame_view);
     app_aircraft_t route_aircraft = {
         .valid = true,
-        .altitude_ft = remote.tracked_flight_altitude_m > 0
-            ? (int)lroundf((float)remote.tracked_flight_altitude_m / 0.3048f)
+        .altitude_ft = remote->tracked_flight_altitude_m > 0
+            ? (int)lroundf((float)remote->tracked_flight_altitude_m / 0.3048f)
             : 0,
-        .speed_kt = remote.tracked_flight_speed_kph > 0
-            ? (int)lroundf((float)remote.tracked_flight_speed_kph / 1.852f)
+        .speed_kt = remote->tracked_flight_speed_kph > 0
+            ? (int)lroundf((float)remote->tracked_flight_speed_kph / 1.852f)
             : 0,
-        .track_deg = remote.tracked_flight_heading_deg,
-        .track_valid = remote.tracked_flight_heading_valid,
+        .track_deg = remote->tracked_flight_heading_deg,
+        .track_valid = remote->tracked_flight_heading_valid,
         .category = 4,
         .type_source = APP_AIRCRAFT_TYPE_SOURCE_FLIGHTAWARE,
     };
     snprintf(route_aircraft.callsign,
              sizeof(route_aircraft.callsign),
              "%.11s",
-             remote.tracked_flight_callsign);
+             remote->tracked_flight_callsign);
     snprintf(route_aircraft.typecode,
              sizeof(route_aircraft.typecode),
              "%.7s",
-             remote.tracked_flight_aircraft_type);
+             remote->tracked_flight_aircraft_type);
     snprintf(route_aircraft.model,
              sizeof(route_aircraft.model),
              "%.15s",
-             remote.tracked_flight_aircraft_type);
+             remote->tracked_flight_aircraft_type);
     snprintf(route_aircraft.airline_iata,
              sizeof(route_aircraft.airline_iata),
              "%.3s",
-             remote.tracked_flight_airline_iata);
+             remote->tracked_flight_airline_iata);
 
     int aircraft_x = CX;
     int aircraft_y = CY;
@@ -9090,7 +9093,7 @@ static void render_tracked_flight(void)
     if (frame_view) {
         tracked_attach_aircraft_identity(
             tracked_aircraft_holder,
-            &remote);
+            remote);
     }
     tracked_aircraft_frame_view = frame_view;
     tracked_aircraft_progress_base = progress;
@@ -9098,9 +9101,9 @@ static void render_tracked_flight(void)
         esp_timer_get_time();
     const int remaining_seconds =
         tracked_duration_seconds(
-            remote.tracked_flight_remaining);
+            remote->tracked_flight_remaining);
     tracked_aircraft_progress_per_second =
-        remote.tracked_flight_speed_kph > 0 &&
+        remote->tracked_flight_speed_kph > 0 &&
                 remaining_seconds > 0 &&
                 progress < 1.0f
             ? (1.0f - progress) /
@@ -9112,12 +9115,12 @@ static void render_tracked_flight(void)
     format_display_altitude_m(
         altitude,
         sizeof(altitude),
-        remote.tracked_flight_altitude_m,
+        remote->tracked_flight_altitude_m,
         imperial);
     format_display_speed_kph(
         speed,
         sizeof(speed),
-        remote.tracked_flight_speed_kph,
+        remote->tracked_flight_speed_kph,
         imperial);
 
     if (!frame_view) {
@@ -9137,8 +9140,8 @@ static void render_tracked_flight(void)
             &origin_align);
         tracked_endpoint_text(
             screen_root,
-            remote.tracked_flight_origin,
-            remote.tracked_flight_origin_city,
+            remote->tracked_flight_origin,
+            remote->tracked_flight_origin_city,
             origin_x,
             origin_y,
             origin_width,
@@ -9160,8 +9163,8 @@ static void render_tracked_flight(void)
             &destination_align);
         tracked_endpoint_text(
             screen_root,
-            remote.tracked_flight_destination,
-            remote.tracked_flight_destination_city,
+            remote->tracked_flight_destination,
+            remote->tracked_flight_destination_city,
             destination_x,
             destination_y,
             destination_width,
@@ -9169,7 +9172,7 @@ static void render_tracked_flight(void)
 
         if (tracked_panels_visible) {
             tracked_draw_globe_panels(
-                &remote,
+                remote,
                 &route_aircraft,
                 altitude,
                 speed,
@@ -9191,23 +9194,23 @@ static void render_tracked_flight(void)
                 aircraft_y);
         tracked_endpoint_text(
             screen_root,
-            remote.tracked_flight_destination,
-            remote.tracked_flight_destination_city,
+            remote->tracked_flight_destination,
+            remote->tracked_flight_destination_city,
             154,
             destination_label_y,
             158,
             LV_TEXT_ALIGN_CENTER);
         tracked_endpoint_text(
             screen_root,
-            remote.tracked_flight_origin,
-            remote.tracked_flight_origin_city,
+            remote->tracked_flight_origin,
+            remote->tracked_flight_origin_city,
             154,
             origin_label_y,
             158,
             LV_TEXT_ALIGN_CENTER);
         if (tracked_panels_visible) {
             tracked_draw_frame_panels(
-                &remote,
+                remote,
                 &route_aircraft,
                 altitude,
                 speed,
@@ -9219,6 +9222,14 @@ static void render_tracked_flight(void)
         }
     }
     tracked_panels_entry_animation_pending = false;
+}
+
+static void render_tracked_flight(void)
+{
+    app_remote_status_t remote;
+    app_remote_get_status(&remote);
+    tracked_reconcile_terminal_snapshot(&remote, (int64_t)time(NULL));
+    render_tracked_flight_snapshot(&remote);
 }
 
 static void draw_weather_condition_icon(lv_obj_t *parent,
@@ -20420,7 +20431,9 @@ static lv_color_t detail_phase_color(detail_flight_phase_t phase)
 static void detail_draw_route(const app_aircraft_t *aircraft,
                               bool animate,
                               bool show_marker,
-                              float marker_progress)
+                              float marker_progress,
+                              const char *origin_city,
+                              const char *destination_city)
 {
     const detail_flight_phase_t phase = detail_phase_for_aircraft(aircraft);
     const lv_color_t color = detail_phase_color(phase);
@@ -20453,12 +20466,20 @@ static void detail_draw_route(const app_aircraft_t *aircraft,
     char origin_city_text[24] = {0};
     char destination_city_text[24] = {0};
     if (aircraft != NULL && aircraft->route_valid) {
-        app_data_get_airport_city(aircraft->origin_iata,
+        if (origin_city != NULL && origin_city[0] != '\0') {
+            snprintf(origin_city_text, sizeof(origin_city_text), "%s", origin_city);
+        } else {
+            app_data_get_airport_city(aircraft->origin_iata,
                                   origin_city_text,
                                   sizeof(origin_city_text));
-        app_data_get_airport_city(aircraft->destination_iata,
+        }
+        if (destination_city != NULL && destination_city[0] != '\0') {
+            snprintf(destination_city_text, sizeof(destination_city_text), "%s", destination_city);
+        } else {
+            app_data_get_airport_city(aircraft->destination_iata,
                                   destination_city_text,
                                   sizeof(destination_city_text));
+        }
     }
     detail_centered_label(screen_root,
                           origin,
@@ -20745,7 +20766,9 @@ static void render_aircraft_detail(void)
         &aircraft,
         animate_route,
         aircraft.route_progress_valid,
-        aircraft.route_progress);
+        aircraft.route_progress,
+        NULL,
+        NULL);
 
     if (app_data_aircraft_enrichment_pending(aircraft.icao24)) {
         lv_obj_t *pending = detail_centered_label(screen_root,
@@ -20823,19 +20846,13 @@ static void render_tracked_flight_detail(void)
     tracked_reconcile_terminal_snapshot(
         &remote,
         (int64_t)time(NULL));
-    draw_shell();
-
-    if (!remote.tracked_flight_valid) {
-        label(
-            screen_root,
-            "NOTHING TO TRACK",
-            &lv_font_montserrat_16,
-            lv_color_hex(0xaeb7b1),
-            LV_ALIGN_CENTER,
-            0,
-            0);
+    if (!remote.tracked_flight_valid || tracked_should_show_countdown(&remote)) {
+        // Direct preview and Dock selection must obey the same gate as touch.
+        // Reuse this snapshot rather than nesting another large stack copy.
+        render_tracked_flight_snapshot(&remote);
         return;
     }
+    draw_shell();
     tracked_prepare_time_rotation(&remote);
 
     app_aircraft_t aircraft = {
@@ -20940,7 +20957,9 @@ static void render_tracked_flight_detail(void)
         &aircraft,
         false,
         show_route_marker,
-        remote.route_progress);
+        remote.route_progress,
+        remote.tracked_flight_origin_city,
+        remote.tracked_flight_destination_city);
     tracked_detail_draw_route_flags();
     if (landed) {
         lv_obj_t *landed_label = detail_centered_label(

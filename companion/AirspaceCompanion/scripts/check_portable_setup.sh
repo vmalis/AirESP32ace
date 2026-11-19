@@ -13,7 +13,8 @@ xcrun swiftc -parse-as-library -module-cache-path "$TEST_DIR/modules" \
 "$TEST_DIR/provisioning" "$PACKAGE/.build/firmware-tool/dist/AirESP32aceFirmwareTool"
 xcrun swiftc -parse-as-library -module-cache-path "$TEST_DIR/modules" \
   "$PACKAGE/Sources/AirspaceCompanion/Models.swift" \
+  "$PACKAGE/Sources/AirspaceCompanion/AirportCityCatalog.swift" \
   "$PACKAGE/Sources/AirspaceCompanion/SharedConfiguration.swift" \
   "$PACKAGE/Sources/AirspaceCompanion/FlightStatusProvider.swift" \
   "$PACKAGE/scripts/city_catalog_smoke.swift" -o "$TEST_DIR/cities"
-"$TEST_DIR/cities"
+"$TEST_DIR/cities" "$PACKAGE/Sources/AirspaceCompanion/Resources"

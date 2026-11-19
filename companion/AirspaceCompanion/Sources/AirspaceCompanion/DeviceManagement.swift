@@ -1173,6 +1173,7 @@ final class DeviceFirmwareInstaller: ObservableObject {
 
     private var monitorTask: Task<Void, Never>?
     private var activeProcess: Process?
+    private var serialAccess: USBSerialAccess.Lease?
     private var processOutput = ""
     private var temporaryDirectory: URL?
 
@@ -1344,7 +1345,9 @@ final class DeviceFirmwareInstaller: ObservableObject {
             "--port", port,
             "--baud", "460800",
             "--before", "default_reset",
-            "--after", "hard_reset",
+            // Native USB RTS reset can leave this ESP32-S3 in download mode.
+            // The supported watchdog reset boots the installed application.
+            "--after", "watchdog_reset",
             "write_flash",
             "--flash_mode", "dio",
             "--flash_freq", "80m",
@@ -1357,25 +1360,29 @@ final class DeviceFirmwareInstaller: ObservableObject {
             arguments.append(String(format: "0x%x", offset))
             arguments.append(url.path)
         }
-        statusText = "Writing firmware to the tracker…"
-        runProcess(
-            executable: tool,
-            arguments: arguments,
-            parseFlashProgress: true
-        ) { [weak self] result in
-            guard let self else { return }
-            switch result {
-            case .success:
-                self.progress = 1.0
-                self.statusText = "Restarting the tracker…"
-                Task { @MainActor in
-                    try? await Task.sleep(for: .milliseconds(650))
+        statusText = "Waiting for exclusive USB access…"
+        Task {
+            serialAccess = await Task.detached { USBSerialAccess.acquire() }.value
+            statusText = "Writing firmware to the tracker…"
+            runProcess(
+                executable: tool,
+                arguments: arguments,
+                parseFlashProgress: true
+            ) { [weak self] result in
+                guard let self else { return }
+                switch result {
+                case .success:
+                    self.progress = 1.0
+                    self.statusText = "Restarting the tracker…"
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .milliseconds(650))
+                        self.finishOperation()
+                        completion(.success(()))
+                    }
+                case let .failure(error):
                     self.finishOperation()
-                    completion(.success(()))
+                    completion(.failure(error))
                 }
-            case let .failure(error):
-                self.finishOperation()
-                completion(.failure(error))
             }
         }
     }
@@ -1487,6 +1494,8 @@ final class DeviceFirmwareInstaller: ObservableObject {
     }
 
     private func finishOperation() {
+        serialAccess?.release()
+        serialAccess = nil
         isBusy = false
         activeProcess = nil
         if let temporaryDirectory {

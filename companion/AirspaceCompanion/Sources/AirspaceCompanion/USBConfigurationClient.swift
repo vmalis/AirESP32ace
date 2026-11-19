@@ -105,6 +105,8 @@ struct USBConfigurationClient: Sendable {
     func fetchConfig(port: String? = nil) async throws -> SharedConfiguration {
         let selectedPort = try resolvedPort(port)
         return try await Task.detached(priority: .userInitiated) {
+            let access = USBSerialAccess.acquire()
+            defer { access.release() }
             let descriptor = try Self.openConfiguredPort(selectedPort)
             defer { Darwin.close(descriptor) }
             var pending = Data()
@@ -125,6 +127,8 @@ struct USBConfigurationClient: Sendable {
     func fetchTracker(port: String? = nil) async throws -> DeviceTrackerSnapshot {
         let selectedPort = try resolvedPort(port)
         return try await Task.detached(priority: .userInitiated) {
+            let access = USBSerialAccess.acquire()
+            defer { access.release() }
             let descriptor = try Self.openConfiguredPort(selectedPort)
             defer { Darwin.close(descriptor) }
             var pending = Data()
@@ -141,6 +145,8 @@ struct USBConfigurationClient: Sendable {
     func fetchLaunches(port: String? = nil) async throws -> DeviceLaunchSnapshot {
         let selectedPort = try resolvedPort(port)
         return try await Task.detached(priority: .userInitiated) {
+            let access = USBSerialAccess.acquire()
+            defer { access.release() }
             let descriptor = try Self.openConfiguredPort(selectedPort)
             defer { Darwin.close(descriptor) }
             var pending = Data()
@@ -164,6 +170,8 @@ struct USBConfigurationClient: Sendable {
             throw ClientError.invalidResponse
         }
         return try await Task.detached(priority: .userInitiated) {
+            let access = USBSerialAccess.acquire()
+            defer { access.release() }
             let descriptor = try Self.openConfiguredPort(selectedPort)
             defer { Darwin.close(descriptor) }
             var pending = Data()
@@ -188,6 +196,8 @@ struct USBConfigurationClient: Sendable {
     ) async throws {
         let selectedPort = try resolvedPort(port)
         try await Task.detached(priority: .userInitiated) {
+            let access = USBSerialAccess.acquire()
+            defer { access.release() }
             let descriptor = try Self.openConfiguredPort(selectedPort)
             defer { Darwin.close(descriptor) }
             var pending = Data()
@@ -217,6 +227,8 @@ struct USBConfigurationClient: Sendable {
     func clearTrackedFlightAssets(port: String? = nil) async throws {
         let selectedPort = try resolvedPort(port)
         try await Task.detached(priority: .userInitiated) {
+            let access = USBSerialAccess.acquire()
+            defer { access.release() }
             let descriptor = try Self.openConfiguredPort(selectedPort)
             defer { Darwin.close(descriptor) }
             var pending = Data()
@@ -243,6 +255,8 @@ struct USBConfigurationClient: Sendable {
             throw ClientError.invalidResponse
         }
         try await Task.detached(priority: .userInitiated) {
+            let access = USBSerialAccess.acquire()
+            defer { access.release() }
             let descriptor = try Self.openConfiguredPort(selectedPort)
             defer { Darwin.close(descriptor) }
             var pending = Data()
@@ -281,6 +295,8 @@ struct USBConfigurationClient: Sendable {
             throw ClientError.invalidResponse
         }
         try await Task.detached(priority: .userInitiated) {
+            let access = USBSerialAccess.acquire()
+            defer { access.release() }
             let descriptor = try Self.openConfiguredPort(selectedPort)
             defer { Darwin.close(descriptor) }
             var pending = Data()

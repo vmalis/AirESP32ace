@@ -38,6 +38,25 @@ static cJSON *state(double lat, double lon, int64_t position, int64_t contact, c
 int main(void)
 {
     app_tracker_flight_t f = flight();
+    app_tracker_flight_t repair = flight();
+    f.display.route_progress = 0.6;
+    f.next_schedule = 12345;
+    strcpy(repair.display.tracked_flight_origin_city, "San Francisco");
+    strcpy(repair.display.tracked_flight_destination_city, "Seoul");
+    repair.display.tracked_flight_slot = 2;
+    repair.display.tracked_route_point_count = 2;
+    repair.display.tracked_route_points[0][0] = 42;
+    app_tracker_preserve_runtime(&repair, &f);
+    assert(!strcmp(repair.display.tracked_flight_origin_city, "San Francisco"));
+    assert(!strcmp(repair.display.tracked_flight_destination_city, "Seoul"));
+    assert(repair.display.route_progress == 0.6f);
+    assert(repair.next_schedule == 12345);
+    assert(repair.display.tracked_flight_slot == 2);
+    assert(repair.display.tracked_route_points[0][0] == 42);
+    f = flight(); // An incomplete re-sync must not erase already-known cities.
+    app_tracker_preserve_runtime(&f, &repair);
+    assert(!strcmp(f.display.tracked_flight_destination_city, "Seoul"));
+    f = flight();
     // Bidirectional Pacific, short hops, and Southern Hemisphere geometry.
     const double routes[][4] = {{37.62, -122.38, 37.46, 126.44},
                                 {37.46, 126.44, 37.62, -122.38},
@@ -93,8 +112,42 @@ int main(void)
     f = flight();
     f.display.tracked_flight_actual_departure_unix = 0;
     strcpy(f.display.tracked_flight_journey_phase, "preflight");
+    f.display.tracked_flight_altitude_m = 5193;
+    f.display.tracked_flight_speed_kph = 750;
+    f.display.tracked_flight_heading_valid = true;
+    strcpy(f.display.tracked_flight_phase, "climbing");
+    f.position_unix = now - 10;
+    f.position_progress = 0.4f;
     app_tracker_reconcile(&f, now);
     assert(f.display.route_progress == 0 && !app_tracker_airborne(&f));
+    assert(f.display.tracked_flight_altitude_m == 0);
+    assert(f.display.tracked_flight_speed_kph == 0);
+    assert(!f.display.tracked_flight_heading_valid);
+    assert(!strcmp(f.display.tracked_flight_phase, "unknown"));
+    assert(f.position_unix == 0 && f.position_progress == 0);
+    // Schedule checks continue during the days-ahead countdown, but stay sparse.
+    assert(app_tracker_schedule_due(&f, f.scheduled_departure - 48 * 3600));
+    assert(app_tracker_schedule_interval(&f, f.scheduled_departure - 48 * 3600) == 21600);
+    assert(app_tracker_schedule_interval(&f, f.scheduled_departure - 12 * 3600) == 3600);
+    assert(app_tracker_schedule_interval(&f, f.scheduled_departure - 3600) == 600);
+    f.next_schedule = now + 600;
+    assert(!app_tracker_schedule_due(&f, now));
+    assert(app_tracker_schedule_due(&f, now + 600));
+    // A matched delay changes ETD and the countdown flag; recovery clears both.
+    strcpy(f.provider_id, "APZ114-delay-test");
+    r = cJSON_Parse("{\"flights\":[{\"fa_flight_id\":\"APZ114-delay-test\","
+                    "\"estimated_out\":\"2026-09-12T23:36:00Z\",\"status\":\"Scheduled\"}]}");
+    assert(app_tracker_parse_schedule(&f, r, true, f.scheduled_departure - 7200));
+    cJSON_Delete(r);
+    assert(f.display.tracked_flight_delayed);
+    assert(!strcmp(f.display.tracked_flight_status, "Delayed"));
+    assert(f.display.tracked_flight_estimated_departure_unix == f.scheduled_departure + 3600);
+    r = cJSON_Parse("{\"flights\":[{\"fa_flight_id\":\"APZ114-delay-test\","
+                    "\"estimated_out\":\"2026-09-12T22:36:00Z\",\"status\":\"Scheduled\"}]}");
+    assert(app_tracker_parse_schedule(&f, r, true, f.scheduled_departure - 7200));
+    cJSON_Delete(r);
+    assert(!f.display.tracked_flight_delayed);
+    assert(!strcmp(f.display.tracked_flight_status, "Scheduled"));
     app_tracker_reconcile(&f, f.display.tracked_flight_estimated_arrival_unix + 86400);
     assert(!f.display.tracked_flight_valid); // A missed departure cannot block the queue forever.
     f = flight();

@@ -1,0 +1,58 @@
+AirESP32ace v0.1.4 - airport labels, reliable countdowns, and USB updates
+
+Update both the Mac app and device firmware. Use Update Firmware for an
+existing instrument; this preserves Wi-Fi/API settings, maps, and flights.
+Then Sync existing flights once to repair stored city labels. Do not choose
+Set Up New Device unless you intend to erase the board.
+
+Changes
+
+- Replaced the city-specific workaround with an offline worldwide fallback
+  covering 18,943 unambiguous IATA/ICAO codes from public-domain OurAirports
+  data. Valid provider cities take precedence; country/coordinate mismatches
+  and unknown codes are not guessed. No extra provider requests are needed.
+- All Tracker pages and both sync transports use the resolved endpoint city.
+  Re-sync repairs static labels without rewinding device-owned live progress.
+  The reference database is Mac-only, independent of the eight-city limit.
+- Tracker stays countdown-only until one hour before estimated departure,
+  including native previews and direct Details/Dock requests. Future flights
+  no longer inherit motion from today's aircraft using the same identifier.
+- The device checks its next flight every six hours far ahead, hourly within
+  24 hours, and every ten minutes within two hours. Confirmed delays update
+  the countdown and display an amber DELAYED label with the Mac closed.
+- Firmware installation holds exclusive USB access so background flight
+  polling cannot corrupt the transfer. An ESP32-S3 watchdog reset boots the
+  installed app instead of leaving the display dark in USB download mode.
+- Packaging discovers the current Swift toolchain's real output directory,
+  preventing an older build from being bundled after a toolchain upgrade.
+
+Downloads
+
+- AirESP32ace-macOS.zip: v0.1.4 build 5, matching firmware and portable tools.
+- AirESP32ace_181126_v02.bin: application-only firmware at offset 0x10000.
+- bootloader.bin and partition-table.bin: first installation/recovery only.
+- AirESP32ace_v0.1.4_SHA256SUMS.txt: checksums for these four downloads.
+
+Verification
+
+- 84 XCTest tests passed, including worldwide airport lookup, identity
+  guards, countdown gates, native rendering, USB serialization, and locking.
+- Sanitized firmware tracker-policy and remote-state tests passed, as did
+  aircraft-registry/route-direction tests and actual ESP32 stack guards.
+- Portable installer/NVS and city-catalog smoke tests passed.
+- Both ESP32-S3 boards were updated through the companion and restarted
+  automatically with their settings and content retained. The original
+  board retained four flights, received repaired city labels via USB Sync,
+  and completed 24 screen transitions with no failed requests or asset-load
+  errors. Its independent FlightAware schedule check returned HTTP 200.
+  The second board retained its empty flight queue and selected city.
+- Credential-free firmware and decompressed app contents were scanned
+  against known local credentials/network names. No matches were found.
+
+Requires Apple silicon and macOS 15+. Unzip and replace the app in
+Applications; no Python, Xcode, Homebrew, or ESP-IDF installation is needed.
+The app is ad-hoc signed, not Apple-notarized. If blocked, use Privacy &
+Security > Open Anyway only if you trust this download; do not disable
+Gatekeeper globally. Not yet physically tested on a second Mac.
+
+Previous GitHub releases, including v0.1.3, remain unchanged.
