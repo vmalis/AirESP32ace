@@ -131,7 +131,7 @@ struct DeviceClient: Sendable {
         }
 
         struct FlightAware: Encodable {
-            let available: Bool
+            let available: Bool?
             var apiKey: String? = nil
         }
 
@@ -279,6 +279,8 @@ struct DeviceClient: Sendable {
         let routeFlagMask: Int?
         let launchAssetMask: Int?
         let spaceAssetFileMask: Int?
+        var radarMapInventory: String? = nil
+        var weatherCityIconMask: Int? = nil
         let batteryAvailable: Bool?
         let batteryPresent: Bool?
         let batteryCharging: Bool?
@@ -747,8 +749,8 @@ struct DeviceClient: Sendable {
         )
     }
 
-    func fetchStatusSnapshot(host: String) async throws -> StatusSnapshot {
-        let url = try url(host: host, path: "/api/status")
+    func fetchStatusSnapshot(host: String, mapInventory: Bool = false) async throws -> StatusSnapshot {
+        let url = try url(host: host, path: mapInventory ? "/api/status?mapInventory=1" : "/api/status")
         var request = URLRequest(url: url)
         request.timeoutInterval = controlTimeout
         let (data, response) = try await URLSession.shared.data(for: request)

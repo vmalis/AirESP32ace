@@ -1,0 +1,10 @@
+key,type,encoding,value
+aircfg,namespace,,
+home_ssid,data,string,"Test, Wi-Fi"
+home_pass,data,string,"quote""comma,pass"
+loc_key,data,string,DUS
+loc_lat,data,string,51.2895
+loc_lon,data,string,6.7668
+tz,data,string,"CET-1CEST,M3.5.0,M10.5.0/3"
+rad_range,data,u16,20
+revision,data,u32,1

@@ -26,6 +26,7 @@ idf_component_register(
         "network.c"
         "remote.c"
         "remote_state.c"
+        "storage_policy.c"
         "route_direction.c"
         "tracker.c"
         "tracker_policy.c"

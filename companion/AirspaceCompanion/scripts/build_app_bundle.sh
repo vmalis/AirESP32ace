@@ -8,10 +8,19 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PACKAGE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 REPOSITORY_DIR="$(cd "$PACKAGE_DIR/../.." && pwd)"
 APP_NAME="AirESP32ace"
-FIRMWARE_RELEASE_NAME="AirESP32ace_280926_v01.bin"
+FIRMWARE_RELEASE_NAME="AirESP32ace_181126_v01.bin"
 BUNDLE_ID="com.vadimmalis.airspace-companion"
 RENDERER_ID="$BUNDLE_ID.renderer"
 BUILD_CONFIG="${1:-debug}"
+FIRMWARE_BUILD_DIR="${AIRSPACE_FIRMWARE_BUILD_DIR:-$REPOSITORY_DIR/firmware/airspace-instrument/build}"
+if [[ "$BUILD_CONFIG" == "release" ]]; then
+  if [[ ! -f "$FIRMWARE_BUILD_DIR/config/sdkconfig.h" ]] || \
+     grep -Eq '^#define CONFIG_AIRSPACE_WIFI_(SSID|PASSWORD) "[^"].*"' \
+       "$FIRMWARE_BUILD_DIR/config/sdkconfig.h"; then
+    echo "error: release requires verified credential-free firmware; use a clean AIRSPACE_FIRMWARE_BUILD_DIR." >&2
+    exit 1
+  fi
+fi
 BUILD_DEVELOPER_DIR="${DEVELOPER_DIR:-$(/usr/bin/xcode-select -p)}"
 BUILD_SWIFT="$(DEVELOPER_DIR="$BUILD_DEVELOPER_DIR" /usr/bin/xcrun --find swift)"
 BUILD_SDK="$(DEVELOPER_DIR="$BUILD_DEVELOPER_DIR" /usr/bin/xcrun --sdk macosx --show-sdk-path)"
@@ -28,10 +37,14 @@ fi
 
 cd "$PACKAGE_DIR"
 
+# Flashing and first-time setup must work on a Mac with no developer tools.
+bash "$SCRIPT_DIR/build_firmware_tool.sh"
+
 cmake \
   -S "$NATIVE_SOURCE_DIR" \
   -B "$NATIVE_BUILD_DIR" \
   -DCMAKE_BUILD_TYPE="$NATIVE_BUILD_TYPE" \
+  -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0 \
   -DCMAKE_OSX_SYSROOT="$BUILD_SDK" \
   -DCMAKE_C_COMPILER="$(DEVELOPER_DIR="$BUILD_DEVELOPER_DIR" /usr/bin/xcrun --find clang)" \
   -DCMAKE_CXX_COMPILER="$(DEVELOPER_DIR="$BUILD_DEVELOPER_DIR" /usr/bin/xcrun --find clang++)"
@@ -62,9 +75,11 @@ CONTENTS_PATH="$APP_PATH/Contents"
 MACOS_PATH="$CONTENTS_PATH/MacOS"
 RESOURCES_PATH="$CONTENTS_PATH/Resources"
 FRAMEWORKS_PATH="$CONTENTS_PATH/Frameworks"
+HELPERS_PATH="$CONTENTS_PATH/Helpers"
 
 rm -rf "$APP_PATH"
-mkdir -p "$MACOS_PATH" "$RESOURCES_PATH" "$FRAMEWORKS_PATH"
+mkdir -p "$MACOS_PATH" "$RESOURCES_PATH" "$FRAMEWORKS_PATH" "$HELPERS_PATH"
+cp "$PACKAGE_DIR/.build/firmware-tool/dist/AirESP32aceFirmwareTool" "$HELPERS_PATH/"
 
 cp "$BINARY_PATH" "$MACOS_PATH/AirESP32ace"
 chmod +x "$MACOS_PATH/AirESP32ace"
@@ -83,13 +98,17 @@ cp -R "$RESOURCE_BUNDLE" "$RESOURCES_PATH/"
 cp \
   "$NATIVE_BUILD_DIR/libAirspaceRenderer.dylib" \
   "$FRAMEWORKS_PATH/libAirspaceRenderer.dylib"
-cp -R "$REPOSITORY_DIR/assets" "$RESOURCES_PATH/assets"
+# Airline logos are fetched/cached on demand, not bulk redistributed.
+rsync -a --exclude airline_logos/ --exclude cargo_logos/ \
+  "$REPOSITORY_DIR/assets/" "$RESOURCES_PATH/assets/"
 cp -R "$REPOSITORY_DIR/Cities" "$RESOURCES_PATH/cities"
 cp "$PACKAGE_DIR/Sources/AirspaceCompanion/Resources/AppIcon.icns" "$RESOURCES_PATH/AppIcon.icns"
+"${AIRSPACE_TOOL_BUILD_PYTHON:-$PACKAGE_DIR/.build/firmware-tool-venv/bin/python}" \
+  "$SCRIPT_DIR/collect_firmware_tool_notices.py" \
+  "$RESOURCES_PATH/ThirdParty/FirmwareTool"
 
 # Ship the current tracker application as a simple one-file update, plus the
 # bootloader and partition table needed only by the first-time setup wizard.
-FIRMWARE_BUILD_DIR="${AIRSPACE_FIRMWARE_BUILD_DIR:-$REPOSITORY_DIR/firmware/airspace-instrument/build}"
 FIRMWARE_RESOURCES_DIR="$RESOURCES_PATH/Firmware"
 if [[ -f "$FIRMWARE_BUILD_DIR/airspace_instrument.bin" && \
       -f "$FIRMWARE_BUILD_DIR/bootloader/bootloader.bin" && \
@@ -105,12 +124,6 @@ if [[ -f "$FIRMWARE_BUILD_DIR/airspace_instrument.bin" && \
     "$FIRMWARE_RESOURCES_DIR/partition-table.bin"
 else
   echo "warning: firmware build outputs are missing; the in-app installer will be unavailable"
-fi
-
-NVS_GENERATOR="${IDF_PATH:-$REPOSITORY_DIR/tools/esp-idf}/components/nvs_flash/nvs_partition_generator/nvs_partition_gen.py"
-if [[ -f "$NVS_GENERATOR" ]]; then
-  mkdir -p "$RESOURCES_PATH/FirmwareTools"
-  cp "$NVS_GENERATOR" "$RESOURCES_PATH/FirmwareTools/nvs_partition_gen.py"
 fi
 
 DEVICE_ARTWORK="$REPOSITORY_DIR/output/guide/assets/device-states/device-clean.png"
@@ -140,9 +153,9 @@ cat > "$CONTENTS_PATH/Info.plist" <<PLIST
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
-  <string>0.1.2</string>
+  <string>0.1.3</string>
   <key>CFBundleVersion</key>
-  <string>3</string>
+  <string>4</string>
   <key>LSMinimumSystemVersion</key>
   <string>15.0</string>
   <key>LSApplicationCategoryType</key>
@@ -178,14 +191,21 @@ if [[ "$BUILD_CONFIG" == "release" ]]; then
   # needed by the distributable app and must not expose the build machine.
   strip -S "$MACOS_PATH/AirESP32ace"
   strip -S "$FRAMEWORKS_PATH/libAirspaceRenderer.dylib"
+  "${AIRSPACE_TOOL_BUILD_PYTHON:-$PACKAGE_DIR/.build/firmware-tool-venv/bin/python}" \
+    "$REPOSITORY_DIR/scripts/audit_release_privacy.py" --app "$APP_PATH"
 fi
 codesign --force --sign - \
   --identifier "$RENDERER_ID" \
   --timestamp=none \
   "$FRAMEWORKS_PATH/libAirspaceRenderer.dylib"
 codesign --force --sign - \
+  --identifier "$BUNDLE_ID.firmware-tool" \
+  --timestamp=none \
+  "$HELPERS_PATH/AirESP32aceFirmwareTool"
+codesign --force --sign - \
   --identifier "$BUNDLE_ID" \
   --timestamp=none \
   "$APP_PATH"
+codesign --verify --deep --strict "$APP_PATH"
 
 echo "$PACKAGE_DIR/$APP_PATH"

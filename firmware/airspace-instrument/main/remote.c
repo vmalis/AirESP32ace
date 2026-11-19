@@ -4,9 +4,11 @@
 #include "remote.h"
 #include "tracker.h"
 #include "launches.h"
+#include "storage_policy.h"
 
 #include <ctype.h>
 #include <errno.h>
+#include <dirent.h>
 #include <fcntl.h>
 #include <math.h>
 #include <stdbool.h>
@@ -41,7 +43,7 @@
 
 static const char *TAG = "airspace_remote";
 #define APP_REMOTE_STORE_FULL_MAP 1
-#define APP_REMOTE_STATUS_JSON_MAX 2800
+#define APP_REMOTE_STATUS_JSON_MAX 3000
 #define MAP_STORE_BUFFER_COUNT 1
 #define MAP_STORAGE_BASE_PATH "/spiffs"
 #define SHARED_CONFIG_PATH MAP_STORAGE_BASE_PATH "/config.jsn"
@@ -133,6 +135,73 @@ static httpd_handle_t server;
 static int usb_config_fd = -1;
 static bool usb_config_driver_ready;
 static wl_handle_t map_storage_wl_handle = WL_INVALID_HANDLE;
+/* Refreshed only on the storage/transfer path, never by a status poll while
+ * LVGL may be reading FAT assets on the other core. */
+static uint32_t storage_total_bytes;
+static uint32_t storage_free_bytes;
+static int storage_write_errno;
+static uint32_t storage_retired_maps_removed;
+
+static void refresh_storage_capacity(void)
+{
+    uint64_t total = 0, free_bytes = 0;
+    if (esp_vfs_fat_info(MAP_STORAGE_BASE_PATH, &total, &free_bytes) == ESP_OK) {
+        storage_total_bytes = (uint32_t)total;
+        storage_free_bytes = (uint32_t)free_bytes;
+    }
+}
+
+static void storage_failure_message(char *message, size_t size, int write_errno)
+{
+    storage_write_errno = write_errno;
+    refresh_storage_capacity();
+    if (write_errno == ENOSPC) {
+        snprintf(message, size, "Device storage is full; flight schedule was not synced");
+    } else {
+        snprintf(message, size, "Device file write failed (errno=%d); retry sync", write_errno);
+    }
+    ESP_LOGW(TAG, "%s; storage free=%lu/%lu", message,
+             (unsigned long)storage_free_bytes, (unsigned long)storage_total_bytes);
+}
+
+static void remove_retired_radar_maps(void)
+{
+    DIR *directory = opendir(MAP_STORAGE_BASE_PATH);
+    if (directory == NULL) return;
+    struct dirent *entry;
+    while ((entry = readdir(directory)) != NULL) {
+        if (!app_storage_is_retired_radar_map(entry->d_name)) continue;
+        char path[64];
+        snprintf(path, sizeof(path), MAP_STORAGE_BASE_PATH "/%.12s", entry->d_name);
+        struct stat file_info;
+        if (stat(path, &file_info) == 0 && S_ISREG(file_info.st_mode) && unlink(path) == 0) {
+            storage_retired_maps_removed++;
+        }
+    }
+    closedir(directory);
+    refresh_storage_capacity();
+    ESP_LOGI(TAG, "Removed %lu retired 5/100-mile radar maps; free=%lu bytes",
+             (unsigned long)storage_retired_maps_removed, (unsigned long)storage_free_bytes);
+}
+
+static bool storage_can_replace_file(const char *path, size_t incoming_bytes)
+{
+    uint64_t total = 0, free_bytes = 0;
+    if (esp_vfs_fat_info(MAP_STORAGE_BASE_PATH, &total, &free_bytes) != ESP_OK) {
+        errno = EIO;
+        return false;
+    }
+    storage_total_bytes = (uint32_t)total;
+    storage_free_bytes = (uint32_t)free_bytes;
+    struct stat existing;
+    const uint64_t replaced = stat(path, &existing) == 0 && S_ISREG(existing.st_mode)
+        ? (uint64_t)existing.st_size : 0;
+    if (!app_storage_can_replace(free_bytes, replaced, incoming_bytes)) {
+        errno = ENOSPC;
+        return false;
+    }
+    return true;
+}
 static const float radar_map_ranges[APP_REMOTE_RADAR_MAP_RANGE_COUNT] = {10.0f, 20.0f, 50.0f};
 
 typedef struct {
@@ -1671,6 +1740,13 @@ static cJSON *build_shared_config_json(
         services,
         "flightAwareReady",
         data_status.flightaware_api_health == APP_API_HEALTH_VALID);
+    /* Expose the same state the screen renders, so pending is distinguishable
+     * from a rejected key during diagnostics. No credential data is returned. */
+    cJSON_AddStringToObject(
+        services,
+        "flightAwareHealth",
+        data_status.flightaware_api_health == APP_API_HEALTH_VALID ? "valid" :
+        data_status.flightaware_api_health == APP_API_HEALTH_INVALID ? "invalid" : "pending");
 
     cJSON *companion = cJSON_IsObject(companion_override)
         ? cJSON_Duplicate(companion_override, true)
@@ -2318,6 +2394,13 @@ static esp_err_t apply_shared_config_root(
         return err;
     }
 
+    /* A changed key must not keep the previous credential's green/red mark.
+     * Run the normal validation in the data worker, not the config handler.
+     * Ordinary syncs with the same key must not add provider requests. */
+    if (strcmp(before.flightaware_api_key, next.flightaware_api_key) != 0) {
+        app_data_request_api_validation();
+    }
+
     cJSON *response = build_shared_config_json(companion, reconnect_wifi, conflict);
     if (response == NULL) {
         if (error != NULL && error_size > 0) {
@@ -2570,6 +2653,7 @@ static void usb_restore_interrupted_files(void)
 static void prepare_tracked_flight_storage(uint32_t retained_slot_mask)
 {
     usb_file_abort();
+    remove_retired_radar_maps();
 
     bool manifest_changed = false;
     char path[96];
@@ -2714,6 +2798,15 @@ static void usb_file_begin_transfer(const char *name,
     if (usb_file_matches(
             final_path, kind, slot, expected_size, expected_hash)) {
         usb_config_send(USB_FILE_CACHED_PREFIX, name);
+        return;
+    }
+
+    if (!storage_can_replace_file(final_path, expected_size)) {
+        const int write_errno = errno;
+        usb_file_abort();
+        char message[112];
+        storage_failure_message(message, sizeof(message), write_errno);
+        usb_config_send(USB_FILE_ERROR_PREFIX, message);
         return;
     }
 
@@ -2865,8 +2958,11 @@ static void usb_file_chunk(const char *payload)
                1,
                decoded_length,
                usb_file_transfer.file) != decoded_length) {
+        const int write_errno = errno;
         usb_file_abort();
-        usb_config_send(USB_FILE_ERROR_PREFIX, "file write failed");
+        char message[112];
+        storage_failure_message(message, sizeof(message), write_errno);
+        usb_config_send(USB_FILE_ERROR_PREFIX, message);
         return;
     }
     usb_file_transfer.running_hash = fnv1a_update(
@@ -2940,8 +3036,11 @@ static bool usb_file_binary_write(const uint8_t *data, size_t length)
         return false;
     }
     if (fwrite(data, 1, length, usb_file_transfer.file) != length) {
+        const int write_errno = errno;
         usb_file_abort();
-        usb_config_send(USB_FILE_ERROR_PREFIX, "binary file write failed");
+        char message[112];
+        storage_failure_message(message, sizeof(message), write_errno);
+        usb_config_send(USB_FILE_ERROR_PREFIX, message);
         return false;
     }
     usb_file_transfer.running_hash = fnv1a_update(
@@ -3124,6 +3223,8 @@ static void usb_state_set(const char *body)
     const cJSON *count = cJSON_GetObjectItemCaseSensitive(tracker, "preparedFlightCount");
     int prepared_count = cJSON_IsNumber(count) ? count->valueint : 0;
     cJSON_Delete(tracker);
+    storage_write_errno = 0;
+    refresh_storage_capacity();
     char response[208];
     snprintf(
         response,
@@ -3571,6 +3672,8 @@ static esp_err_t status_get_handler(httpd_req_t *req)
              "\"spaceAssetExpectedMask\":%lu,\"spaceAssetLoadFailures\":%lu,"
              "\"weatherCityIconMask\":%lu,\"weatherCityIconExpectedMask\":%lu,"
              "\"psramFreeKB\":%u,\"psramLargestKB\":%u,"
+             "\"storageTotalBytes\":%lu,\"storageFreeBytes\":%lu,\"storageWriteErrno\":%d,"
+             "\"retiredRadarMapsRemoved\":%lu,"
              "\"routePointCount\":%u,"
              "\"wifiState\":\"%s\",\"ssid\":\"%s\",\"locationKey\":\"%s\",\"location\":\"%s\",\"lat\":\"%s\",\"lon\":\"%s\","
              "\"dataState\":\"%s\",\"fetchedUnix\":%d,\"weatherValid\":%s,\"metarValid\":%s,"
@@ -3616,6 +3719,10 @@ static esp_err_t status_get_handler(httpd_req_t *req)
                  heap_caps_get_largest_free_block(
                      MALLOC_CAP_SPIRAM) /
                  1024U),
+             (unsigned long)storage_total_bytes,
+             (unsigned long)storage_free_bytes,
+             storage_write_errno,
+             (unsigned long)storage_retired_maps_removed,
              (unsigned)remote.tracked_route_point_count,
              app_wifi_state_text(net.wifi_state),
              net.configured_ssid,
@@ -4358,6 +4465,13 @@ static esp_err_t receive_map(httpd_req_t *req,
         route_map_path_for_slot_view(route_slot, route_view_index, path, sizeof(path));
     }
 
+    if (!storage_can_replace_file(path, APP_REMOTE_MAP_BYTES)) {
+        char message[112];
+        storage_failure_message(message, sizeof(message), errno);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, message);
+        return ESP_FAIL;
+    }
+
     FILE *file = fopen(path, "wb");
     if (file == NULL) {
         char error[96];
@@ -4380,17 +4494,28 @@ static esp_err_t receive_map(httpd_req_t *req,
             return ESP_FAIL;
         }
         if (fwrite(scratch, 1, chunk, file) != (size_t)chunk) {
+            const int write_errno = errno;
             fclose(file);
-            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "map write failed");
+            unlink(path);
+            char message[112];
+            storage_failure_message(message, sizeof(message), write_errno);
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, message);
             return ESP_FAIL;
         }
         received += chunk;
         vTaskDelay(pdMS_TO_TICKS(1));
     }
     if (fclose(file) != 0) {
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "map close failed");
+        const int write_errno = errno;
+        unlink(path);
+        char message[112];
+        storage_failure_message(message, sizeof(message), write_errno);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, message);
         return ESP_FAIL;
     }
+
+    storage_write_errno = 0;
+    refresh_storage_capacity();
 
     app_remote_status_t next = read_status();
     /* Do not free the decoded map here. The HTTP task can finish an upload
@@ -4923,6 +5048,10 @@ static void mount_map_storage(void)
     }
 
     ESP_LOGI(TAG, "Map storage mounted on %s", MAP_STORAGE_BASE_PATH);
+    remove_retired_radar_maps();
+    refresh_storage_capacity();
+    ESP_LOGI(TAG, "Storage free=%lu/%lu bytes",
+             (unsigned long)storage_free_bytes, (unsigned long)storage_total_bytes);
     usb_restore_interrupted_files();
     tracked_asset_manifest_load();
     load_persisted_tracked_state();

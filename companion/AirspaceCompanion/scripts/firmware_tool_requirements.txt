@@ -1,0 +1,4 @@
+# Pinned build inputs for the bundled Apple-silicon installer.
+pyinstaller==6.16.0
+esptool==4.12.0
+esp-idf-nvs-partition-gen==0.1.9

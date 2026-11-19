@@ -338,9 +338,13 @@ bool app_tracker_validate_flightaware(void)
     if (!*cfg.flightaware_api_key)
         return false;
     int code = 0;
+    /* Alerts are a Standard/Premium feature and return 401 even for a valid
+     * Personal-tier key. Match the companion's no-cost account health probe;
+     * only a successful, parsed response validates the credential. */
     cJSON *root =
-        request("https://aeroapi.flightaware.com/aeroapi/alerts", cfg.flightaware_api_key, &code);
-    bool valid = root != NULL && code == 200;
+        request("https://aeroapi.flightaware.com/aeroapi/account/usage",
+                cfg.flightaware_api_key, &code);
+    bool valid = code == 200 && cJSON_IsObject(root);
     cJSON_Delete(root);
     return valid;
 }
@@ -541,6 +545,7 @@ cJSON *app_tracker_snapshot(void)
 {
     cJSON *root = cJSON_CreateObject();
     cJSON_AddBoolToObject(root, "deviceTrackingSupported", true);
+    cJSON_AddNumberToObject(root, "deviceUnix", (double)time(NULL));
     if (!store || !mutex)
         return root;
     xSemaphoreTake(mutex, portMAX_DELAY);

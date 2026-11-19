@@ -18,13 +18,19 @@ final class DeviceProvisioningTests: XCTestCase {
         XCTAssertTrue(csv.contains("home_pass,data,string,\"quote\"\"comma,pass\""))
         XCTAssertTrue(csv.contains("rad_range,data,u16,20"))
         XCTAssertTrue(csv.contains("revision,data,u32,1"))
+        XCTAssertTrue(csv.contains("fa_key,data,string,flightaware"))
     }
 
-    func testProvisioningCSVBuildsACompleteNVSPartitionWhenIDFToolsExist() throws {
-        guard let python = DeviceFirmwareResources.python,
-              let generator = DeviceFirmwareResources.nvsGenerator
-        else {
-            throw XCTSkip("ESP-IDF Python tools are not installed")
+    func testProvisioningCSVBuildsACompleteNVSPartitionWithBundledTool() throws {
+        let package = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let tool = package.appendingPathComponent(
+            ".build/firmware-tool/dist/AirESP32aceFirmwareTool"
+        )
+        guard FileManager.default.isExecutableFile(atPath: tool.path) else {
+            XCTFail("Build the bundled installer before running provisioning tests")
+            return
         }
 
         let directory = FileManager.default.temporaryDirectory
@@ -48,9 +54,9 @@ final class DeviceProvisioningTests: XCTestCase {
 
         let process = Process()
         let output = Pipe()
-        process.executableURL = python
+        process.executableURL = tool
         process.arguments = [
-            generator.path,
+            "nvs",
             "generate",
             csv.path,
             binary.path,
@@ -58,6 +64,8 @@ final class DeviceProvisioningTests: XCTestCase {
         ]
         process.standardOutput = output
         process.standardError = output
+        process.environment = ["PATH": "/usr/bin:/bin", "PYTHONPATH": "/nonexistent"]
+        process.currentDirectoryURL = directory
         try process.run()
         process.waitUntilExit()
 
@@ -70,6 +78,12 @@ final class DeviceProvisioningTests: XCTestCase {
             atPath: binary.path
         )
         XCTAssertEqual(attributes[.size] as? Int, 0x6000)
+    }
+
+    func testMissingBundledToolDoesNotFallBackToDeveloperPython() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        XCTAssertNil(DeviceFirmwareResources.installerTool(in: directory))
     }
 
     private func fixture(
@@ -100,6 +114,7 @@ final class DeviceProvisioningTests: XCTestCase {
             openSkyClientID: "client",
             openSkyClientSecret: "secret",
             airLabsAPIKey: "airlabs",
+            flightAwareAPIKey: "flightaware",
             flightAwareAvailable: true
         )
     }

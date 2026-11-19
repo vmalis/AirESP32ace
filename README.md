@@ -42,7 +42,7 @@ ESP32-S3 firmware and a native macOS companion for a 466 × 466 circular AMOLED 
 ## What it does
 
 - Renders a smooth local aircraft radar with real icons, predicted motion, selectable range, callsigns, and aircraft detail views.
-- Tracks planned flights on both a geographic 9-to-3 route and a custom 6-to-12 route projection.
+- Tracks planned flights in Live Route, Straight-line Route, and Details views.
 - Shows current weather, a five-day forecast, and animated radar imagery for the selected city.
 - Includes a GMT-style world clock, sunrise/sunset bezel, and configurable city list.
 - Computes a live solar-system view and lunar phase, animates the next total solar eclipse, and tracks the ISS over a generated world map.
@@ -87,7 +87,9 @@ Download [AirESP32ace-macOS.zip](release/macos/AirESP32ace-macOS.zip), unzip it,
 
 The archive is built from the source in this repository and includes the native device renderer and firmware installer resources. Its SHA-256 checksum is published in [release/macos/SHA256SUMS](release/macos/SHA256SUMS).
 
-Version **0.1.2** moves both launch and tracked-flight runtime updates onto the ESP32. Install the matching firmware and companion together. The Mac configures the tracking list, enabled launch programs, credentials, and artwork; the device refreshes data over Wi-Fi. See [autonomous space launches](docs/autonomous-space-launches.md) for freshness rules, provider limits, and verification details.
+Version **0.1.3** fixes FlightAware validation for Personal-tier keys, makes stock-board setup complete and retryable, and bundles the USB flashing/NVS tools so the receiving Mac needs no Python, ESP-IDF, Homebrew, or Xcode. Install the matching firmware and companion together. The Mac configures the tracking list, enabled launch programs, credentials, and artwork; the device refreshes data over Wi-Fi. See [autonomous space launches](docs/autonomous-space-launches.md) for freshness rules and provider limits.
+
+After **Set Up New Device**, enter the device's assigned Wi-Fi address in Settings and choose **Install device content**. Wait for the verification receipt. This installs the selected cities' three radar-map ranges plus Weather/Space artwork. **Update Firmware** preserves settings and content; **Set Up New Device** erases the entire board. Charlotte (CLT) and Columbia, South Carolina (CAE), are optional Mac-side replacements—the device still holds at most eight cities.
 
 ### 3. Run the Mac companion from source
 
@@ -150,9 +152,9 @@ The project is designed to remain useful when one provider is unavailable.
 - **AirLabs** is the tracked-flight fallback when FlightAware is unavailable or does not return the selected occurrence.
 - Public weather and launch-schedule endpoints provide their respective screens.
 
-Tracked-flight schedule and gate information is refreshed conservatively: no automatic provider polling more than 24 hours before departure, hourly inside the 24-hour window, and every 10 minutes inside two hours. While airborne, the one-minute loop obtains live position, altitude, speed, and heading from OpenSky; the exact selected FlightAware occurrence is cached for 10 minutes, so AeroAPI is never polled once per minute. FlightAware never serves nearby Radar traffic, and AirLabs is used only when FlightAware fails or lacks required enrichment. Because the FlightAware credential stays in the macOS Keychain rather than on the ESP32, the companion app must be running for those periodic refreshes to reach the device.
+The ESP32 owns scheduled-flight and launch updates and continues refreshing with the Mac closed. FlightAware supplies designated-flight schedules/gates and conservative telemetry fallback; OpenSky supplies airborne positions and nearby Radar traffic. AirLabs provides fallback/enrichment. Provider credentials are provisioned separately onto the device and are never embedded in downloadable firmware or the app. On a different Mac, blank API fields preserve keys already held by the device; enter provider credentials separately when the new Mac needs to look up and prescribe flights.
 
-Accounts, availability, quotas, and permitted uses are controlled by each provider. Bring your own credentials and review their terms before use. The API status page performs a lightweight authorization check; having a field filled in is not treated as proof that the credential is active.
+Accounts, availability, quotas, and permitted uses are controlled by each provider. Bring your own credentials and review their terms before use. The API status page performs a lightweight authorization check; having a field filled in is not treated as proof that the credential is active. FlightAware uses the no-cost account-usage probe, not the tier-restricted alerts API. A changed key is revalidated by the device.
 
 ## Maps and artwork
 
@@ -184,6 +186,6 @@ The project is free and open source. If you publish a derivative, a link back is
 
 ## License and notices
 
-Source code and project-authored assets are released under the [MIT License](LICENSE). Third-party data and runtime-downloaded artwork remain subject to their respective owners' terms. AirESP32ace is an independent personal project and is not affiliated with Waveshare, Apple, OpenSky, FlightAware, AirLabs, NASA, Roscosmos, SpaceX, or any airline.
+Source code and project-authored assets are released under the [MIT License](LICENSE), except the separately executed firmware installer helper, which is marked GPL-2.0-or-later. The app includes its helper source, matching esptool source archive, and dependency notices under `Contents/Resources/ThirdParty/FirmwareTool`. Third-party data and runtime-downloaded artwork remain subject to their respective owners' terms. AirESP32ace is an independent personal project and is not affiliated with Waveshare, Apple, OpenSky, FlightAware, AirLabs, NASA, Roscosmos, SpaceX, or any airline.
 
 Designed and directed by **Vadim Malis**.

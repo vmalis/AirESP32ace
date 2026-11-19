@@ -1,8 +1,10 @@
 # AirESP32ace for macOS
 
-`AirESP32ace-macOS.zip` contains **AirESP32ace.app v0.1.2** for Apple-silicon Macs running **macOS 15 or newer**. It includes the matching `AirESP32ace_280926_v01.bin` firmware, bootloader, partition table, and native renderer.
+`AirESP32ace-macOS.zip` contains **AirESP32ace.app v0.1.3** for Apple-silicon Macs running **macOS 15 or newer**. It includes the matching `AirESP32ace_181126_v01.bin` firmware, bootloader, partition table, native renderer, and self-contained USB flashing/NVS helper. The receiving Mac does not need Python, ESP-IDF, Homebrew, or Xcode.
 
 Update both app and device firmware. Launch and tracked-flight updates now run on the ESP32; the companion prescribes programs/flights and reads the device's live state. Existing launch artwork can be retained. See [autonomous space launches](../../docs/autonomous-space-launches.md).
+
+Version 0.1.3 corrects FlightAware's false-red indicator for active Personal-tier keys, preserves device credentials when API fields are blank on another Mac, and completes fresh-device content installation. After **Set Up New Device**, enter the device's assigned IP under Settings and choose **Install device content**. **Update Firmware** preserves existing settings and artwork. Charlotte and Columbia (South Carolina) are optional replacements within the eight-city limit.
 
 ## Open the app
 

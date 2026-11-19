@@ -62,6 +62,7 @@ struct ContentView: View {
                         queuedMapRefresh: queuedMapRefresh,
                         isBusy: isBusy,
                         statusMessage: operationStatusMessage,
+                        statusIsFailure: operationStatusIsFailure,
                         progress: model.syncProgress,
                         sync: syncDevice
                     )
@@ -145,7 +146,24 @@ struct ContentView: View {
         if model.renderState.isRendering {
             return model.renderState.message
         }
+        if model.pushState.isFailure {
+            return model.pushState.message
+        }
+        if model.configPushState.isFailure {
+            return model.configPushState.message
+        }
+        if model.renderState.isFailure {
+            return model.renderState.message
+        }
+        if case .pushed = model.pushState {
+            return model.pushState.message
+        }
         return nil
+    }
+
+    private var operationStatusIsFailure: Bool {
+        !isBusy && (model.pushState.isFailure ||
+            model.configPushState.isFailure || model.renderState.isFailure)
     }
 
     @ViewBuilder
@@ -773,6 +791,7 @@ private struct CompanionTopBar: View {
     let queuedMapRefresh: Bool
     let isBusy: Bool
     let statusMessage: String?
+    let statusIsFailure: Bool
     let progress: Double?
     let sync: () -> Void
 
@@ -793,10 +812,11 @@ private struct CompanionTopBar: View {
                 VStack(alignment: .trailing, spacing: 6) {
                     Text(statusMessage)
                         .font(.system(size: 11, weight: .medium, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.66))
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                    if let progress {
+                        .foregroundStyle(statusIsFailure ? .orange : .white.opacity(0.66))
+                        .lineLimit(2)
+                        .help(statusMessage)
+                        .accessibilityIdentifier("syncStatusMessage")
+                    if isBusy, let progress {
                         ProgressView(value: progress)
                             .progressViewStyle(.linear)
                             .tint(RadarTheme.green)
@@ -924,6 +944,26 @@ private struct DeviceWorkspace: View {
                     }
 
                     HStack(spacing: 10) {
+                        if !availableRadarCities.isEmpty {
+                            Menu {
+                                ForEach(radarCities) { current in
+                                    Menu("Replace \(current.displayCity)") {
+                                        ForEach(availableRadarCities) { replacement in
+                                            Button("\(replacement.displayCity) (\(replacement.key))") {
+                                                model.replaceRadarLocation(current.key, with: replacement)
+                                                queuedMapRefresh = true
+                                            }
+                                        }
+                                    }
+                                }
+                            } label: {
+                                Label("Replace city", systemImage: "arrow.left.arrow.right")
+                            }
+                            .fixedSize()
+                            .accessibilityIdentifier("replaceRadarCity")
+                            .help("Choose a replacement without exceeding eight device cities; Sync applies it.")
+                        }
+
                         Button {
                             addingCity = true
                         } label: {
@@ -946,7 +986,7 @@ private struct DeviceWorkspace: View {
                         .help("Add a city using decimal latitude and longitude")
 
                         if model.radarCityKeys.count >= 8 {
-                            Text("Remove one city to add another.")
+                            Text("Eight selected · replace a city or remove one to add another.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -1804,6 +1844,14 @@ private struct SettingsWorkspace: View {
                                 Task { await model.refreshDeviceStatus() }
                             }
                         }
+                        Button("Install device content") {
+                            Task { await model.installDeviceContent() }
+                        }
+                        .disabled(model.pushState.isPushing || model.configPushState.isPushing)
+                        .accessibilityIdentifier("installDeviceContent")
+                        Text("After first-time setup: enter the device’s Wi-Fi address, then install city maps and Space artwork. Retry safely if interrupted.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                     .frame(maxWidth: .infinity)
 

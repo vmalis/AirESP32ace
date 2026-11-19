@@ -722,7 +722,10 @@ struct DeviceManagementView: View {
         let action = pendingInstallation == .newDevice
             ? "erase and configure"
             : "write firmware to"
-        return "AirESP32ace will \(action):\n\n\(candidate.confirmationDescription)\n\nVerify this is your AirESP32ace device. Choosing the wrong ESP32-S3 can overwrite its firmware."
+        let passwordWarning = pendingInstallation == .newDevice && model.homeWiFiPassword.isEmpty
+            ? "\n\nNo Home Wi-Fi password is entered. This will only connect to an open network; a new device cannot reuse another device’s saved password."
+            : ""
+        return "AirESP32ace will \(action):\n\n\(candidate.confirmationDescription)\n\nVerify this is your AirESP32ace device. Choosing the wrong ESP32-S3 can overwrite its firmware.\(passwordWarning)"
     }
 
     private func working(title: String) -> some View {
@@ -921,6 +924,7 @@ struct DeviceManagementView: View {
             openSkyClientID: model.openSkyClientID,
             openSkyClientSecret: model.openSkyClientSecret,
             airLabsAPIKey: model.airLabsAPIKey,
+            flightAwareAPIKey: model.flightAwareAPIKey,
             flightAwareAvailable: !model.flightAwareAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         )
 
@@ -929,8 +933,8 @@ struct DeviceManagementView: View {
             switch result {
             case .success:
                 step = .success(
-                    title: "New device ready",
-                    detail: "The tracker has been flashed and configured. It is joining \(homeSSID). Its settings page will show the assigned IP address; enter that address in the companion if your router gives the new tracker a different one."
+                    title: "Firmware installed",
+                    detail: "Check Wi-Fi on the tracker’s Settings page. In the companion’s Settings, enter its assigned IP address, then choose Install device content to add all city maps and Space artwork."
                 )
             case let .failure(error):
                 step = .failure(
@@ -1103,6 +1107,7 @@ struct DeviceProvisioningConfiguration: Sendable {
     let openSkyClientID: String
     let openSkyClientSecret: String
     let airLabsAPIKey: String
+    let flightAwareAPIKey: String
     let flightAwareAvailable: Bool
 
     var nvsCSV: String {
@@ -1138,6 +1143,7 @@ struct DeviceProvisioningConfiguration: Sendable {
             ("osky_id", "data", "string", openSkyClientID),
             ("osky_sec", "data", "string", openSkyClientSecret),
             ("airlabs", "data", "string", airLabsAPIKey),
+            ("fa_key", "data", "string", flightAwareAPIKey),
             ("fa_avail", "data", "u8", flightAwareAvailable ? "1" : "0"),
             ("revision", "data", "u32", "1"),
         ]
@@ -1246,12 +1252,8 @@ final class DeviceFirmwareInstaller: ObservableObject {
             completion(.failure(DeviceFirmwareError.firmwareMissing))
             return
         }
-        guard let generator = DeviceFirmwareResources.nvsGenerator else {
-            completion(.failure(DeviceFirmwareError.nvsGeneratorMissing))
-            return
-        }
-        guard let python = DeviceFirmwareResources.python else {
-            completion(.failure(DeviceFirmwareError.pythonMissing))
+        guard let tool = DeviceFirmwareResources.installerTool else {
+            completion(.failure(DeviceFirmwareError.installerToolMissing))
             return
         }
 
@@ -1281,9 +1283,9 @@ final class DeviceFirmwareInstaller: ObservableObject {
             )
 
             runProcess(
-                executable: python,
+                executable: tool,
                 arguments: [
-                    generator.path,
+                    "nvs",
                     "generate",
                     csv.path,
                     nvs.path,
@@ -1304,6 +1306,7 @@ final class DeviceFirmwareInstaller: ObservableObject {
                             (0x9000, nvs),
                             (0x10000, included.application),
                         ],
+                        eraseAll: true,
                         completion: completion
                     )
                 case let .failure(error):
@@ -1327,15 +1330,16 @@ final class DeviceFirmwareInstaller: ObservableObject {
     private func runFlash(
         port: String,
         segments: [(Int, URL)],
+        eraseAll: Bool = false,
         completion: @escaping @MainActor @Sendable (Result<Void, Error>) -> Void
     ) {
-        guard let python = DeviceFirmwareResources.python else {
+        guard let tool = DeviceFirmwareResources.installerTool else {
             finishOperation()
-            completion(.failure(DeviceFirmwareError.pythonMissing))
+            completion(.failure(DeviceFirmwareError.installerToolMissing))
             return
         }
         var arguments = [
-            "-m", "esptool",
+            "flash",
             "--chip", "esp32s3",
             "--port", port,
             "--baud", "460800",
@@ -1346,13 +1350,16 @@ final class DeviceFirmwareInstaller: ObservableObject {
             "--flash_freq", "80m",
             "--flash_size", "32MB",
         ]
+        // Only first-time setup wipes storage. Ordinary firmware updates
+        // continue to preserve credentials, maps, and the tracked queue.
+        if eraseAll { arguments.append("--erase-all") }
         for (offset, url) in segments.sorted(by: { $0.0 < $1.0 }) {
             arguments.append(String(format: "0x%x", offset))
             arguments.append(url.path)
         }
         statusText = "Writing firmware to the tracker…"
         runProcess(
-            executable: python,
+            executable: tool,
             arguments: arguments,
             parseFlashProgress: true
         ) { [weak self] result in
@@ -1627,8 +1634,7 @@ enum DeviceSerialDiscovery {
 enum DeviceFirmwareError: LocalizedError {
     case deviceNotConnected
     case firmwareMissing
-    case nvsGeneratorMissing
-    case pythonMissing
+    case installerToolMissing
     case toolFailed(String)
 
     var errorDescription: String? {
@@ -1637,10 +1643,8 @@ enum DeviceFirmwareError: LocalizedError {
             "Connect the tracker with a USB-C data cable and try again."
         case .firmwareMissing:
             "The included firmware package is missing. Rebuild the companion app bundle or choose an application .bin file."
-        case .nvsGeneratorMissing:
-            "The device-configuration tool is missing from this app build."
-        case .pythonMissing:
-            "The ESP32 flashing runtime was not found. Install the ESP-IDF tools on this Mac, then reopen Aerospace Companion."
+        case .installerToolMissing:
+            "The bundled device installer is missing. Download a complete AirESP32ace app; no Python or ESP-IDF installation is required."
         case let .toolFailed(detail):
             "The tracker could not be flashed. \(detail)"
         }
@@ -1672,43 +1676,15 @@ enum DeviceFirmwareResources {
         return nil
     }
 
-    static var nvsGenerator: URL? {
-        for candidate in nvsGeneratorCandidates
-        where FileManager.default.fileExists(atPath: candidate.path) {
-            return candidate
-        }
-        return nil
+    static var installerTool: URL? {
+        installerTool(in: Bundle.main.bundleURL)
     }
 
-    static var python: URL? {
-        let environment = ProcessInfo.processInfo.environment
-        var candidates: [URL] = []
-        if let configured = environment["AIRSPACE_PYTHON"], !configured.isEmpty {
-            candidates.append(URL(fileURLWithPath: configured))
-        }
-
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        let environments = home.appendingPathComponent(
-            ".espressif/python_env",
-            isDirectory: true
+    static func installerTool(in appBundle: URL) -> URL? {
+        let tool = appBundle.appendingPathComponent(
+            "Contents/Helpers/AirESP32aceFirmwareTool"
         )
-        if let entries = try? FileManager.default.contentsOfDirectory(
-            at: environments,
-            includingPropertiesForKeys: nil,
-            options: [.skipsHiddenFiles]
-        ) {
-            candidates.append(contentsOf: entries
-                .sorted { $0.lastPathComponent > $1.lastPathComponent }
-                .map { $0.appendingPathComponent("bin/python") })
-        }
-        candidates.append(contentsOf: [
-            URL(fileURLWithPath: "/opt/homebrew/bin/python3"),
-            URL(fileURLWithPath: "/usr/local/bin/python3"),
-            URL(fileURLWithPath: "/usr/bin/python3"),
-        ])
-        return candidates.first {
-            FileManager.default.isExecutableFile(atPath: $0.path)
-        }
+        return FileManager.default.isExecutableFile(atPath: tool.path) ? tool : nil
     }
 
     static var deviceArtworkCandidates: [URL] {
@@ -1743,25 +1719,6 @@ enum DeviceFirmwareResources {
                 root.appendingPathComponent(
                     "firmware/airspace-instrument/build",
                     isDirectory: true
-                )
-            )
-        }
-        return result
-    }
-
-    private static var nvsGeneratorCandidates: [URL] {
-        var result: [URL] = []
-        if let resources = Bundle.main.resourceURL {
-            result.append(
-                resources
-                    .appendingPathComponent("FirmwareTools", isDirectory: true)
-                    .appendingPathComponent("nvs_partition_gen.py")
-            )
-        }
-        if let root = repositoryRoot {
-            result.append(
-                root.appendingPathComponent(
-                    "tools/esp-idf/components/nvs_flash/nvs_partition_generator/nvs_partition_gen.py"
                 )
             )
         }

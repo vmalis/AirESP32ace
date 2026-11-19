@@ -6,6 +6,18 @@ import XCTest
 @testable import AirspaceCompanion
 
 final class DeviceTrackerTests: XCTestCase {
+    func testBlankMacCredentialsDoNotClearDeviceFlightAwareKey() throws {
+        let credentials = DeviceClient.DeviceConfigPayload.Credentials(
+            openSky: .init(enabled: true, clientId: nil, clientSecret: nil),
+            airLabs: .init(apiKey: nil),
+            flightAware: .init(available: nil, apiKey: nil)
+        )
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(
+            with: JSONEncoder().encode(credentials)) as? [String: Any])
+        let flightAware = try XCTUnwrap(object["flightAware"] as? [String: Any])
+        XCTAssertTrue(flightAware.isEmpty)
+    }
+
     func testPackagedAppAllowsPrivateDeviceHTTPWithoutDisablingInternetATS() throws {
         let scriptURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()

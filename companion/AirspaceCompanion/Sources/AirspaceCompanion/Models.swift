@@ -739,14 +739,32 @@ struct RadarLocationPreset: Identifiable, Hashable {
         )
     ]
 
+    // Mac-side choices only. The original eight remain the default device set.
+    static let additionalChoices: [RadarLocationPreset] = [
+        .init(
+            key: "CLT", title: "Charlotte",
+            coordinate: CLLocationCoordinate2D(latitude: 35.2138, longitude: -80.9491),
+            timezone: "EST5EDT,M3.2.0,M11.1.0", metar: "KCLT",
+            radarHalfDegrees: "1.55"
+        ),
+        .init(
+            key: "CAE", title: "Columbia",
+            coordinate: CLLocationCoordinate2D(latitude: 33.9388, longitude: -81.1195),
+            timezone: "EST5EDT,M3.2.0,M11.1.0", metar: "KCAE",
+            radarHalfDegrees: "1.55"
+        ),
+    ]
+
+    static var catalog: [RadarLocationPreset] { all + additionalChoices }
+
     static func preset(for key: String) -> RadarLocationPreset? {
-        all.first { $0.key.caseInsensitiveCompare(key) == .orderedSame }
+        catalog.first { $0.key.caseInsensitiveCompare(key) == .orderedSame }
     }
 
     static func preset(label: String, metar: String) -> RadarLocationPreset? {
         let normalizedLabel = label.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedMetar = metar.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        return all.first {
+        return catalog.first {
             $0.key.caseInsensitiveCompare(normalizedLabel) == .orderedSame ||
             $0.title.caseInsensitiveCompare(normalizedLabel) == .orderedSame ||
             $0.metar.uppercased() == normalizedMetar

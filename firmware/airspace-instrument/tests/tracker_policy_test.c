@@ -136,5 +136,25 @@ int main(void)
     assert(f.display.tracked_flight_valid);
     app_tracker_reconcile(&f, arrival + 7200);
     assert(!f.display.tracked_flight_valid);
+    // Four upcoming trips must select the earliest departure immediately,
+    // even when the instrument has been off for days and none is airborne.
+    app_tracker_flight_t upcoming[4];
+    for (unsigned i = 0; i < 4; i++) {
+        upcoming[i] = flight();
+        upcoming[i].scheduled_departure = now + (7 + 2 * i) * 86400;
+        upcoming[i].display.tracked_flight_estimated_departure_unix =
+            upcoming[i].scheduled_departure;
+        upcoming[i].display.tracked_flight_estimated_arrival_unix =
+            upcoming[i].scheduled_departure + 12 * 3600;
+        upcoming[i].display.tracked_flight_actual_departure_unix = 0;
+        strcpy(upcoming[i].display.tracked_flight_journey_phase, "preflight");
+        app_tracker_reconcile(&upcoming[i], now);
+        assert(upcoming[i].display.tracked_flight_valid);
+        assert(!app_tracker_airborne(&upcoming[i]));
+        assert(upcoming[i].display.route_progress == 0);
+    }
+    assert(app_tracker_select(upcoming, 4, -1, now) == 0);
+    assert(upcoming[0].display.tracked_flight_estimated_departure_unix - now == 7 * 86400);
+    assert(app_tracker_select(upcoming, 4, 3, now) == 0);
     puts("Tracker policy tests passed (geometry, stale samples, identity, estimation, lifecycle).");
 }
