@@ -24,6 +24,12 @@ static void copy(char *dst, size_t size, const char *s)
     if (s && *s)
         snprintf(dst, size, "%s", s);
 }
+static void schedule_text(char *dst, size_t size, const cJSON *row, const char *key)
+{
+    const cJSON *value = get(row, key);
+    if (cJSON_IsNull(value) || cJSON_IsString(value))
+        snprintf(dst, size, "%s", cJSON_IsString(value) ? value->valuestring : "");
+}
 static bool number(const cJSON *v)
 {
     return cJSON_IsNumber(v) && isfinite(v->valuedouble);
@@ -45,7 +51,10 @@ void app_tracker_preserve_runtime(app_tracker_flight_t *next, const app_tracker_
     char destination[sizeof(next->display.tracked_flight_destination_city)];
     memcpy(origin, next->display.tracked_flight_origin_city, sizeof(origin));
     memcpy(destination, next->display.tracked_flight_destination_city, sizeof(destination));
+    app_tracker_zone_t origin_zone = next->origin_zone, destination_zone = next->destination_zone;
     *next = *old;
+    if (origin_zone.count) next->origin_zone = origin_zone;
+    if (destination_zone.count) next->destination_zone = destination_zone;
     next->display.tracked_flight_slot = slot;
     memcpy(next->display.tracked_route_points, points, sizeof(points));
     next->display.tracked_route_point_count = count;
@@ -98,7 +107,7 @@ void app_tracker_route_coordinate(const app_tracker_flight_t *f, double p, doubl
 int64_t app_tracker_timestamp(const cJSON *v)
 {
     if (number(v))
-        return v->valuedouble > 0 ? (int64_t)v->valuedouble : 0;
+        return v->valuedouble > 0 && v->valuedouble <= 4133980800.0 ? (int64_t)v->valuedouble : 0;
     if (!cJSON_IsString(v))
         return 0;
     int y, m, d, h, n;
@@ -140,6 +149,12 @@ bool app_tracker_terminal(const app_tracker_flight_t *f)
     return f->display.tracked_flight_actual_arrival_unix > 0 ||
            !strcasecmp(f->display.tracked_flight_journey_phase, "arrived") ||
            !strcasecmp(f->display.tracked_flight_status, "Cancelled");
+}
+bool app_tracker_diverted(const app_tracker_flight_t *f)
+{
+    return !strcasecmp(f->display.tracked_flight_journey_phase, "diverted") ||
+           !strcasecmp(f->display.tracked_flight_status, "Diverted") ||
+           !strcasecmp(f->display.tracked_flight_status, "Landed after diversion");
 }
 bool app_tracker_airborne(const app_tracker_flight_t *f)
 {
@@ -268,7 +283,8 @@ static bool matches_schedule(const app_tracker_flight_t *f, const cJSON *r, bool
            identity(dest, f->display.tracked_flight_destination) && dep > 0 &&
            f->scheduled_departure > 0 && llabs(dep - f->scheduled_departure) <= 3 * 3600;
 }
-bool app_tracker_parse_schedule(app_tracker_flight_t *f, const cJSON *root, bool fa, int64_t now)
+bool app_tracker_parse_schedule_fields(app_tracker_flight_t *f, const cJSON *root, bool fa, int64_t now,
+                                      unsigned *reported_gate_fields)
 {
     const cJSON *rows = get(root, fa ? "flights" : "response"), *r = NULL, *candidate;
     if (!rows && !fa)
@@ -287,6 +303,14 @@ bool app_tracker_parse_schedule(app_tracker_flight_t *f, const cJSON *root, bool
         }
     if (!r)
         return false;
+    if (reported_gate_fields) {
+        const char *keys[] = {"gate_origin","gate_destination","terminal_origin","terminal_destination"};
+        *reported_gate_fields = 0;
+        for (unsigned i = 0; i < 4; i++) {
+            const cJSON *v = get(r, keys[i]);
+            if (cJSON_IsString(v) || cJSON_IsNull(v)) *reported_gate_fields |= 1U << i;
+        }
+    }
     app_remote_status_t *d = &f->display;
     int64_t actual_dep = fa ? first_time(r, "actual_off", "actual_out", NULL)
                             : first_time(r, "dep_actual_ts", NULL, NULL);
@@ -304,15 +328,18 @@ bool app_tracker_parse_schedule(app_tracker_flight_t *f, const cJSON *root, bool
         d->tracked_flight_estimated_arrival_unix = eta;
     if (actual_arr > 0 && actual_arr <= now + 60)
         d->tracked_flight_actual_arrival_unix = actual_arr;
-    copy(d->tracked_flight_origin_terminal, sizeof(d->tracked_flight_origin_terminal),
-         str(r, fa ? "terminal_origin" : "dep_terminal"));
-    copy(d->tracked_flight_origin_gate, sizeof(d->tracked_flight_origin_gate),
-         str(r, fa ? "gate_origin" : "dep_gate"));
-    copy(d->tracked_flight_destination_terminal, sizeof(d->tracked_flight_destination_terminal),
-         str(r, fa ? "terminal_destination" : "arr_terminal"));
-    copy(d->tracked_flight_destination_gate, sizeof(d->tracked_flight_destination_gate),
-         str(r, fa ? "gate_destination" : "arr_gate"));
+    schedule_text(d->tracked_flight_origin_terminal, sizeof(d->tracked_flight_origin_terminal),
+                  r, fa ? "terminal_origin" : "dep_terminal");
+    schedule_text(d->tracked_flight_origin_gate, sizeof(d->tracked_flight_origin_gate),
+                  r, fa ? "gate_origin" : "dep_gate");
+    schedule_text(d->tracked_flight_destination_terminal, sizeof(d->tracked_flight_destination_terminal),
+                  r, fa ? "terminal_destination" : "arr_terminal");
+    schedule_text(d->tracked_flight_destination_gate, sizeof(d->tracked_flight_destination_gate),
+                  r, fa ? "gate_destination" : "arr_gate");
     const char *status = str(r, "status");
+    const cJSON *flag = get(r, "diverted");
+    bool diverted = cJSON_IsTrue(flag) || !strcasecmp(status, "diverted") ||
+                    (app_tracker_diverted(f) && !(fa && cJSON_IsFalse(flag)));
     d->tracked_flight_delayed =
         (f->scheduled_departure > 0 &&
          d->tracked_flight_estimated_departure_unix > f->scheduled_departure + 60) ||
@@ -320,16 +347,25 @@ bool app_tracker_parse_schedule(app_tracker_flight_t *f, const cJSON *root, bool
     if (cJSON_IsTrue(get(r, "cancelled")) || !strcasecmp(status, "cancelled") ||
         !strcasecmp(status, "canceled")) {
         copy(d->tracked_flight_status, sizeof(d->tracked_flight_status), "Cancelled");
-        d->tracked_flight_valid = false;
+        copy(d->tracked_flight_journey_phase, sizeof(d->tracked_flight_journey_phase), "cancelled");
+        if (!f->terminal_notice_unix) f->terminal_notice_unix = now;
     } else if (d->tracked_flight_actual_arrival_unix > 0 || !strcasecmp(status, "landed") ||
                !strcasecmp(status, "arrived")) {
         copy(d->tracked_flight_journey_phase, sizeof(d->tracked_flight_journey_phase), "arrived");
+        copy(d->tracked_flight_status, sizeof(d->tracked_flight_status),
+             diverted ? "Landed after diversion" : "Arrived");
         if (!d->tracked_flight_actual_arrival_unix)
             d->tracked_flight_actual_arrival_unix = eta > 0 && eta < now ? eta : now;
+    } else if (diverted) {
+        copy(d->tracked_flight_journey_phase, sizeof(d->tracked_flight_journey_phase), "diverted");
+        copy(d->tracked_flight_status, sizeof(d->tracked_flight_status), "Diverted");
+        copy(f->source, sizeof(f->source), fa ? "FlightAware schedule" : "AirLabs schedule");
     } else if (d->tracked_flight_actual_departure_unix > 0 || !strcasecmp(status, "en-route") ||
                !strcasecmp(status, "active")) {
         copy(d->tracked_flight_journey_phase, sizeof(d->tracked_flight_journey_phase), "enroute");
+        copy(d->tracked_flight_status, sizeof(d->tracked_flight_status), "En route");
     } else if (!app_tracker_airborne(f)) {
+        copy(d->tracked_flight_journey_phase, sizeof(d->tracked_flight_journey_phase), "preflight");
         copy(d->tracked_flight_status, sizeof(d->tracked_flight_status),
              d->tracked_flight_delayed ? "Delayed" : "Scheduled");
         copy(f->source, sizeof(f->source), fa ? "FlightAware schedule" : "AirLabs schedule");
@@ -341,23 +377,70 @@ bool app_tracker_parse_schedule(app_tracker_flight_t *f, const cJSON *root, bool
         copy(f->icao24, sizeof(f->icao24), str(r, "hex"));
     return true;
 }
+bool app_tracker_parse_schedule(app_tracker_flight_t *f, const cJSON *root, bool fa, int64_t now)
+{
+    return app_tracker_parse_schedule_fields(f, root, fa, now, NULL);
+}
+bool app_tracker_decode_zone(const cJSON *array, app_tracker_zone_t *z)
+{
+    if (!array) return true; /* older companion */
+    if (!cJSON_IsArray(array) || cJSON_GetArraySize(array) > APP_TRACKER_ZONE_STEPS)
+        return false;
+    z->count = 0;
+    const cJSON *step;
+    cJSON_ArrayForEach(step, array) {
+        const cJSON *at = cJSON_GetArrayItem(step, 0), *offset = cJSON_GetArrayItem(step, 1);
+        if (!cJSON_IsArray(step) || cJSON_GetArraySize(step) != 2 || !number(at) ||
+            at->valuedouble < 1 || at->valuedouble > 4102444800.0 ||
+            !number(offset) || offset->valuedouble != offset->valueint ||
+            offset->valueint < -86400 || offset->valueint > 86400 ||
+            (z->count && at->valuedouble <= z->at[z->count - 1])) return false;
+        z->at[z->count] = (int64_t)at->valuedouble;
+        z->offset[z->count++] = offset->valueint;
+    }
+    return true;
+}
+static void update_offset(const app_tracker_zone_t *z, int64_t at, int *offset)
+{
+    for (unsigned i = 0; i < z->count && i < APP_TRACKER_ZONE_STEPS && z->at[i] <= at; i++)
+        *offset = z->offset[i];
+}
 void app_tracker_reconcile(app_tracker_flight_t *f, int64_t now)
 {
     app_remote_status_t *d = &f->display;
     int64_t eta = d->tracked_flight_estimated_arrival_unix;
+    update_offset(&f->origin_zone, now, &d->tracked_flight_origin_current_utc_offset_s);
+    update_offset(&f->destination_zone, now, &d->tracked_flight_destination_current_utc_offset_s);
+    update_offset(&f->origin_zone, d->tracked_flight_actual_departure_unix ?
+        d->tracked_flight_actual_departure_unix : d->tracked_flight_estimated_departure_unix,
+        &d->tracked_flight_departure_utc_offset_s);
+    update_offset(&f->destination_zone, d->tracked_flight_actual_arrival_unix ?
+        d->tracked_flight_actual_arrival_unix : eta, &d->tracked_flight_arrival_utc_offset_s);
     if (eta > 0 && now >= eta + 86400)
         d->tracked_flight_valid = false;
     if (app_tracker_terminal(f)) {
         f->estimated = false;
-        d->route_progress = 1;
+        bool cancelled = !strcasecmp(d->tracked_flight_status, "Cancelled");
+        if (cancelled && !f->terminal_notice_unix && now >= 1700000000)
+            f->terminal_notice_unix = now;
+        d->route_progress = (cancelled || app_tracker_diverted(f)) ? 0 : 1;
         d->tracked_flight_speed_kph = 0;
         d->tracked_flight_altitude_m = 0;
-        copy(d->tracked_flight_phase, sizeof(d->tracked_flight_phase), "landed");
-        if (strcasecmp(d->tracked_flight_status, "Cancelled"))
+        d->tracked_flight_heading_valid = false;
+        copy(d->tracked_flight_phase, sizeof(d->tracked_flight_phase), cancelled ? "unknown" : "landed");
+        if (!cancelled && !app_tracker_diverted(f))
             copy(d->tracked_flight_status, sizeof(d->tracked_flight_status), "Arrived");
-        int64_t arrival = d->tracked_flight_actual_arrival_unix;
+        int64_t arrival = cancelled ? f->terminal_notice_unix : d->tracked_flight_actual_arrival_unix;
         if (arrival > 0 && now >= arrival + 7200)
             d->tracked_flight_valid = false;
+        return;
+    }
+    if (app_tracker_diverted(f)) {
+        /* The prepared geometry ends at the originally booked airport.
+         * Do not manufacture another map, arrival, or progress on that leg. */
+        d->route_progress = 0;
+        d->tracked_flight_heading_valid = false;
+        f->estimated = false;
         return;
     }
     if (!app_tracker_airborne(f)) {
@@ -399,21 +482,32 @@ void app_tracker_reconcile(app_tracker_flight_t *f, int64_t now)
 int app_tracker_select(const app_tracker_flight_t *f, unsigned count, int current, int64_t now)
 {
     if (current >= 0 && (unsigned)current < count && f[current].display.tracked_flight_valid &&
-        app_tracker_airborne(&f[current]))
+        (app_tracker_airborne(&f[current]) ||
+         (app_tracker_diverted(&f[current]) && !app_tracker_terminal(&f[current]))))
         return current;
     int first = -1, arrived = -1;
+    int64_t earliest = INT64_MAX, latest = -1;
     for (unsigned i = 0; i < count; i++) {
         if (!f[i].display.tracked_flight_valid)
             continue;
         if (app_tracker_terminal(&f[i])) {
-            if (arrived < 0)
+            int64_t stamp = f[i].display.tracked_flight_actual_arrival_unix;
+            if (!stamp) stamp = f[i].terminal_notice_unix;
+            if (stamp > latest) {
                 arrived = i;
+                latest = stamp;
+            }
             continue;
         }
-        if (first < 0 || f[i].scheduled_departure < f[first].scheduled_departure)
+        if (app_tracker_airborne(&f[i]) || app_tracker_diverted(&f[i])) return i;
+        int64_t dep = f[i].display.tracked_flight_estimated_departure_unix;
+        if (!dep) dep = f[i].scheduled_departure;
+        if (dep < earliest) {
+            earliest = dep;
             first = i;
+        }
     }
-    if (first >= 0 && (arrived < 0 || f[first].scheduled_departure <= now))
+    if (first >= 0 && (arrived < 0 || earliest <= now + 3600))
         return first;
     return arrived >= 0 ? arrived : first;
 }

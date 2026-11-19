@@ -29,6 +29,13 @@ known = {}
 credentials = Path.home() / "Library/Application Support/AirspaceCompanion/credentials.json"
 if credentials.exists():
     known.update(json.loads(credentials.read_text()))
+pairing = Path.home() / "Library/Application Support/AirESP32acePairing/credentials.json"
+if pairing.exists():
+    import base64
+    encoded = json.loads(pairing.read_text()).get("board")
+    if encoded:
+        known["encoded_board_pairing"] = encoded
+        known["board_pairing_token"] = json.loads(base64.b64decode(encoded))["token"]
 config = root / "firmware/airspace-instrument/sdkconfig"
 if config.exists():
     for name, value in re.findall(r'^(CONFIG_AIRSPACE_WIFI_(?:SSID|PASSWORD))=(".*")$', config.read_text(), re.M):
@@ -52,7 +59,7 @@ if args.git or args.git_repo:
     paths += [git_root / name.decode() for name in files.split(b"\0") if name]
 failures = []
 checked = 0
-private_files = {"credentials.json", "airspace_config.json", "sdkconfig", "sdkconfig.old",
+private_files = {"credentials.json", "key.pem", "airspace_config.json", "sdkconfig", "sdkconfig.old",
                  "device_config.csv", "device_config.bin", "device-config.csv", "device-config.bin"}
 
 def inspect(name, data, packaged=False):

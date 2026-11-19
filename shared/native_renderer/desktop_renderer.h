@@ -192,6 +192,7 @@ void airspace_renderer_set_launch(
     int weather_probability_percent);
 void airspace_renderer_render(void);
 const uint16_t *airspace_renderer_pixels(void);
+uint32_t airspace_renderer_frame_generation(void);
 int airspace_renderer_width(void);
 int airspace_renderer_height(void);
 int airspace_renderer_stride_bytes(void);

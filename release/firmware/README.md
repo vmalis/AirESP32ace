@@ -8,7 +8,7 @@ These binaries target the **Waveshare ESP32-S3-Touch-AMOLED-1.75C** with 32 MB f
 |---:|---|---|
 | `0x0000` | `bootloader.bin` | ESP32-S3 bootloader |
 | `0x8000` | `partition-table.bin` | AirESP32ace partition layout |
-| `0x10000` | `AirESP32ace_181126_v02.bin` | v0.1.4 main application |
+| `0x10000` | `AirESP32ace_191126_v03.bin` | v0.1.5 main application |
 
 ## First installation
 
@@ -26,7 +26,7 @@ esptool.py --chip esp32s3 \
   --flash_size 32MB \
   0x0000 bootloader.bin \
   0x8000 partition-table.bin \
-  0x10000 AirESP32ace_181126_v02.bin
+  0x10000 AirESP32ace_191126_v03.bin
 ```
 
 If automatic download mode fails, hold the lower BOOT button while starting the flash, then release it once the serial connection begins.
@@ -37,12 +37,12 @@ When the bootloader and partition table are already installed, only the applicat
 
 ```bash
 esptool.py --chip esp32s3 --port /dev/cu.usbmodemXXXX \
-  --after watchdog_reset write_flash 0x10000 AirESP32ace_181126_v02.bin
+  --after watchdog_reset write_flash 0x10000 AirESP32ace_191126_v03.bin
 ```
 
 The companion's firmware panel can perform the same application update after it confirms the connected USB device.
 
-The application-only update preserves existing configuration and stored assets. Use the matching v0.1.4 companion, then Sync existing flights once to repair missing city labels. All Tracker views use the prescribed cities; the device accepts corrected static labels without resetting live flight progress. The Mac's worldwide reference is not linked into firmware. Preflight telemetry is cleared, direct Details/Dock rendering respects the one-hour countdown gate, and confirmed delays update the countdown. Device schedule checks run every six hours far ahead, hourly within 24 hours, and every ten minutes within two hours. Earlier FlightAware validation and setup fixes remain included. See [autonomous flight tracking](../../docs/autonomous-flight-tracking.md).
+The application-only update keeps settings and stored assets. Use the matching v0.1.5 companion to verify the running firmware, then **Pair This Mac** over USB if you need wireless sync. If a firmware write completes but verification times out, check the display and reconnect the data cable once the updater has stopped. Do not erase or repeatedly flash the board to work around a verification error. See the [release notes and known limits](../v0.1.5-notes.txt).
 
 ## Configuration
 

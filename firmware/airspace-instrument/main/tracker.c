@@ -2,15 +2,15 @@
 // Created by VM, August 2026
 
 #include "tracker.h"
+#include "tracker_storage.h"
 #include "app_config.h"
 #include "data.h"
-#include "esp_crt_bundle.h"
 #include "esp_heap_caps.h"
-#include "esp_http_client.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include <ctype.h>
 #include <math.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
@@ -19,49 +19,39 @@
 #define QUEUE_PATH "/spiffs/tracker.bin"
 #define QUEUE_TEMP "/spiffs/tracker.tmp"
 #define QUEUE_BACKUP "/spiffs/tracker.bak"
-#define QUEUE_MAGIC 0x54524b31U
-typedef struct {
-    uint32_t magic, bytes, count;
-    int active;
-    app_tracker_flight_t flights[APP_TRACKER_SLOTS];
-    uint32_t checksum;
-} tracker_store_t;
 static tracker_store_t *store;
 static SemaphoreHandle_t mutex;
 static uint32_t generation;
+static _Atomic uint32_t asset_generation;
 static int64_t last_save;
 static int64_t next_tick;
-static bool ready;
+static bool ready, primary_trusted;
 
-static uint32_t checksum(const tracker_store_t *s)
-{
-    uint32_t h = 2166136261U;
-    const uint8_t *p = (const uint8_t *)s;
-    for (size_t i = 0; i < offsetof(tracker_store_t, checksum); i++)
-        h = (h ^ p[i]) * 16777619U;
-    return h;
-}
 static bool save(tracker_store_t *s)
 {
-    s->magic = QUEUE_MAGIC;
-    s->bytes = sizeof(*s);
-    s->checksum = checksum(s);
     FILE *file = fopen(QUEUE_TEMP, "wb");
     if (!file)
         return false;
-    bool ok = fwrite(s, 1, sizeof(*s), file) == sizeof(*s);
+    bool ok = app_tracker_store_write(file, s);
     ok = fclose(file) == 0 && ok;
     if (!ok) {
         unlink(QUEUE_TEMP);
         return false;
     }
-    /* Recover the previous complete queue if power fails during replacement. */
-    unlink(QUEUE_BACKUP);
-    rename(QUEUE_PATH, QUEUE_BACKUP);
+    /* On recovery the backup can be the *only* valid queue. Never replace
+     * it with the damaged primary before the new queue is committed. */
+    if (primary_trusted) {
+        unlink(QUEUE_BACKUP);
+        if (rename(QUEUE_PATH, QUEUE_BACKUP) != 0) return false;
+        primary_trusted = false;
+    } else {
+        unlink(QUEUE_PATH);
+    }
     if (rename(QUEUE_TEMP, QUEUE_PATH) != 0) {
-        rename(QUEUE_BACKUP, QUEUE_PATH);
+        primary_trusted = rename(QUEUE_BACKUP, QUEUE_PATH) == 0;
         return false;
     }
+    primary_trusted = true;
     unlink(QUEUE_BACKUP);
     last_save = time(NULL);
     return true;
@@ -71,10 +61,9 @@ static bool load(const char *path, tracker_store_t *s)
     FILE *file = fopen(path, "rb");
     if (!file)
         return false;
-    bool ok = fread(s, 1, sizeof(*s), file) == sizeof(*s);
+    bool ok = app_tracker_store_read(file, s);
     fclose(file);
-    return ok && s->magic == QUEUE_MAGIC && s->bytes == sizeof(*s) &&
-           s->count <= APP_TRACKER_SLOTS && s->checksum == checksum(s);
+    return ok;
 }
 void app_tracker_start(void)
 {
@@ -85,16 +74,31 @@ void app_tracker_start(void)
 }
 static void publish(void)
 {
+    atomic_store(&asset_generation, store->asset_generation);
     app_remote_status_t empty = {0};
     app_remote_publish_tracker(store->active >= 0 ? &store->flights[store->active].display : &empty,
                                store->count > 0);
+}
+uint32_t app_tracker_asset_generation(void)
+{
+    /* Rendering/remote reads must not invert the tracker -> remote lock order. */
+    return atomic_load(&asset_generation);
+}
+unsigned app_tracker_prepared_count(void)
+{
+    if (!store || !mutex) return 0;
+    xSemaphoreTake(mutex, portMAX_DELAY);
+    unsigned count = store->count;
+    xSemaphoreGive(mutex);
+    return count;
 }
 void app_tracker_load(void)
 {
     if (!store || !mutex)
         return;
     xSemaphoreTake(mutex, portMAX_DELAY);
-    bool loaded = load(QUEUE_PATH, store) || load(QUEUE_BACKUP, store);
+    primary_trusted = load(QUEUE_PATH, store);
+    bool loaded = primary_trusted || load(QUEUE_BACKUP, store);
     if (!loaded) {
         memset(store, 0, sizeof(*store));
         store->active = -1;
@@ -130,6 +134,13 @@ bool app_tracker_install(const cJSON *root)
     if (!next)
         return false;
     next->active = -1;
+    const cJSON *assets = cJSON_GetObjectItemCaseSensitive(root, "assetGeneration");
+    if (assets) {
+        if (!cJSON_IsNumber(assets) || !isfinite(assets->valuedouble) ||
+            assets->valuedouble < 0 || assets->valuedouble > UINT32_MAX ||
+            assets->valuedouble != floor(assets->valuedouble)) goto invalid;
+        next->asset_generation = (uint32_t)assets->valuedouble;
+    }
     unsigned slots = 0;
     const cJSON *item;
     cJSON_ArrayForEach(item, queue)
@@ -138,6 +149,9 @@ bool app_tracker_install(const cJSON *root)
         if (!app_remote_decode_state(item, &f->display))
             goto invalid;
         const cJSON *meta = cJSON_GetObjectItemCaseSensitive(item, "tracking");
+        if (!app_tracker_decode_zone(cJSON_GetObjectItemCaseSensitive(meta, "originOffsetSteps"), &f->origin_zone) ||
+            !app_tracker_decode_zone(cJSON_GetObjectItemCaseSensitive(meta, "destinationOffsetSteps"), &f->destination_zone))
+            goto invalid;
         const cJSON *id = cJSON_GetObjectItemCaseSensitive(meta, "planId");
         const cJSON *provider = cJSON_GetObjectItemCaseSensitive(meta, "providerId");
         const cJSON *dep = cJSON_GetObjectItemCaseSensitive(meta, "scheduledDepartureUnix");
@@ -289,46 +303,20 @@ static bool encode(const char *s, char *out, size_t size)
     out[i] = 0;
     return true;
 }
+static cJSON *request_form(const char *url, const char *key, const char *form, int *code)
+{
+    return app_data_request_provider_json(url, form, key, 64 * 1024, code, NULL);
+}
 static cJSON *request(const char *url, const char *key, int *code)
 {
-    *code = 0;
-    esp_http_client_config_t config = {.url = url,
-                                       .timeout_ms = 8000,
-                                       .crt_bundle_attach = esp_crt_bundle_attach,
-                                       .disable_auto_redirect = true,
-                                       .buffer_size = 2048,
-                                       .buffer_size_tx = 2048};
-    esp_http_client_handle_t client = esp_http_client_init(&config);
-    if (!client)
-        return NULL;
-    esp_http_client_set_header(client, "Accept", "application/json");
-    if (key && *key)
-        esp_http_client_set_header(client, "x-apikey", key);
-    char *body = heap_caps_malloc(64 * 1024 + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    cJSON *result = NULL;
-    if (body && esp_http_client_open(client, 0) == ESP_OK) {
-        esp_http_client_fetch_headers(client);
-        *code = esp_http_client_get_status_code(client);
-        int count = 0, n = 0;
-        while (count < 64 * 1024 &&
-               (n = esp_http_client_read(client, body + count, 64 * 1024 - count)) > 0)
-            count += n;
-        body[count] = 0;
-        if (*code >= 200 && *code < 300 && n >= 0 &&
-            esp_http_client_is_complete_data_received(client))
-            result = cJSON_Parse(body);
-    }
-    heap_caps_free(body);
-    esp_http_client_close(client);
-    esp_http_client_cleanup(client);
-    return result;
+    return request_form(url, key, NULL, code);
 }
-bool app_tracker_validate_flightaware(void)
+int app_tracker_flightaware_probe_status(void)
 {
     app_config_t cfg;
     app_config_get(&cfg);
     if (!*cfg.flightaware_api_key)
-        return false;
+        return -1;
     int code = 0;
     /* Alerts are a Standard/Premium feature and return 401 even for a valid
      * Personal-tier key. Match the companion's no-cost account health probe;
@@ -338,66 +326,71 @@ bool app_tracker_validate_flightaware(void)
                 cfg.flightaware_api_key, &code);
     bool valid = code == 200 && cJSON_IsObject(root);
     cJSON_Delete(root);
-    return valid;
+    return valid ? 200 : code == 200 ? 0 : code;
 }
 
 static bool schedule(app_tracker_flight_t *f, const app_config_t *cfg, int64_t now)
 {
     char id[400], url[768];
     bool matched = false;
+    unsigned reported = 0;
     cJSON *root = NULL;
     if (*cfg->flightaware_api_key &&
         encode(*f->provider_id ? f->provider_id : f->display.tracked_flight_callsign, id,
                sizeof(id))) {
         snprintf(url, sizeof(url), "https://aeroapi.flightaware.com/aeroapi/flights/%s", id);
         root = request(url, cfg->flightaware_api_key, &f->http_status);
-        matched = app_tracker_parse_schedule(f, root, true, now);
+        matched = app_tracker_parse_schedule_fields(f, root, true, now, &reported);
         cJSON_Delete(root);
     }
     bool after_eta = f->display.tracked_flight_estimated_arrival_unix > 0 &&
                      now >= f->display.tracked_flight_estimated_arrival_unix;
-    bool missing_gates = !*f->display.tracked_flight_origin_gate ||
-                         !*f->display.tracked_flight_destination_gate ||
-                         !*f->display.tracked_flight_origin_terminal ||
-                         !*f->display.tracked_flight_destination_terminal;
+    bool missing_gates = (!(reported & 1) && !*f->display.tracked_flight_origin_gate) ||
+                         (!(reported & 2) && !*f->display.tracked_flight_destination_gate) ||
+                         (!(reported & 4) && !*f->display.tracked_flight_origin_terminal) ||
+                         (!(reported & 8) && !*f->display.tracked_flight_destination_terminal);
     if ((!matched || missing_gates || (after_eta && !app_tracker_terminal(f))) &&
         *cfg->airlabs_api_key) {
         char key[300];
         if (encode(f->display.tracked_flight_number, id, sizeof(id)) &&
             encode(cfg->airlabs_api_key, key, sizeof(key))) {
-            snprintf(url, sizeof(url), "https://airlabs.co/api/v9/flight?flight_iata=%s&api_key=%s",
-                     id, key);
-            root = request(url, NULL, &f->http_status);
+            snprintf(url, sizeof(url), "flight_iata=%s&api_key=%s", id, key);
+            root = request_form("https://airlabs.co/api/v9/flight", NULL, url, &f->http_status);
             if (matched) {
-                app_tracker_flight_t supplement = *f;
-                if (app_tracker_parse_schedule(&supplement, root, false, now)) {
+                app_tracker_flight_t *supplement = heap_caps_malloc(sizeof(*supplement), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+                if (supplement) *supplement = *f;
+                if (supplement && app_tracker_parse_schedule(supplement, root, false, now)) {
                     /* FlightAware still owns schedule metadata on its exact occurrence. */
-                    if (!*f->display.tracked_flight_origin_gate)
+                    if (!(reported & 1) && !*f->display.tracked_flight_origin_gate)
                         memcpy(f->display.tracked_flight_origin_gate,
-                               supplement.display.tracked_flight_origin_gate,
+                               supplement->display.tracked_flight_origin_gate,
                                sizeof(f->display.tracked_flight_origin_gate));
-                    if (!*f->display.tracked_flight_destination_gate)
+                    if (!(reported & 2) && !*f->display.tracked_flight_destination_gate)
                         memcpy(f->display.tracked_flight_destination_gate,
-                               supplement.display.tracked_flight_destination_gate,
+                               supplement->display.tracked_flight_destination_gate,
                                sizeof(f->display.tracked_flight_destination_gate));
-                    if (!*f->display.tracked_flight_origin_terminal)
+                    if (!(reported & 4) && !*f->display.tracked_flight_origin_terminal)
                         memcpy(f->display.tracked_flight_origin_terminal,
-                               supplement.display.tracked_flight_origin_terminal,
+                               supplement->display.tracked_flight_origin_terminal,
                                sizeof(f->display.tracked_flight_origin_terminal));
-                    if (!*f->display.tracked_flight_destination_terminal)
+                    if (!(reported & 8) && !*f->display.tracked_flight_destination_terminal)
                         memcpy(f->display.tracked_flight_destination_terminal,
-                               supplement.display.tracked_flight_destination_terminal,
+                               supplement->display.tracked_flight_destination_terminal,
                                sizeof(f->display.tracked_flight_destination_terminal));
                     if (!*f->icao24)
-                        memcpy(f->icao24, supplement.icao24, sizeof(f->icao24));
-                    if (after_eta && app_tracker_terminal(&supplement)) {
+                        memcpy(f->icao24, supplement->icao24, sizeof(f->icao24));
+                    if (after_eta && supplement->display.tracked_flight_actual_arrival_unix > 0) {
                         f->display.tracked_flight_actual_arrival_unix =
-                            supplement.display.tracked_flight_actual_arrival_unix;
+                            supplement->display.tracked_flight_actual_arrival_unix;
                         memcpy(f->display.tracked_flight_journey_phase,
-                               supplement.display.tracked_flight_journey_phase,
+                               supplement->display.tracked_flight_journey_phase,
                                sizeof(f->display.tracked_flight_journey_phase));
+                        if (app_tracker_diverted(supplement))
+                            snprintf(f->display.tracked_flight_status,
+                                     sizeof(f->display.tracked_flight_status), "Landed after diversion");
                     }
                 }
+                heap_caps_free(supplement);
             } else
                 matched = app_tracker_parse_schedule(f, root, false, now);
             cJSON_Delete(root);
@@ -439,6 +432,11 @@ static bool motion(app_tracker_flight_t *f, int64_t now)
         snprintf(query, sizeof(query), "lamin=%.4f&lamax=%.4f&lomin=%.4f&lomax=%.4f&extended=1",
                  fmax(-90, lat - 8), fmin(90, lat + 8), a, b);
         cJSON *root = app_data_tracker_opensky(query, &f->http_status);
+        if (f->http_status == APP_OPENSKY_DEFERRED) {
+            /* An unqueried dateline half is not evidence of lost coverage. */
+            cJSON_Delete(root);
+            break;
+        }
         bool ok = app_tracker_parse_opensky(f, root, now);
         cJSON_Delete(root);
         if (ok)
@@ -472,10 +470,20 @@ void app_tracker_tick(void)
     publish();
     int index = store->active;
     if (index < 0) {
-        if (now - last_save >= 300)
-            save(store);
         xSemaphoreGive(mutex);
         return;
+    }
+    /* A retained arrival/cancellation is presentation only; continue polling
+     * the *next* prescription at its normal sparse schedule cadence. */
+    if (app_tracker_terminal(&store->flights[index])) {
+        int next = -1;
+        for (unsigned i = 0; i < store->count; i++) {
+            if (!store->flights[i].display.tracked_flight_valid || app_tracker_terminal(&store->flights[i])) continue;
+            if (next < 0 || store->flights[i].scheduled_departure < store->flights[next].scheduled_departure)
+                next = (int)i;
+        }
+        if (next < 0) { xSemaphoreGive(mutex); return; }
+        index = next;
     }
     app_tracker_flight_t f = store->flights[index];
     uint32_t started_generation = generation;
@@ -489,15 +497,19 @@ void app_tracker_tick(void)
             f.checked_unix = time(NULL);
         changed = true;
     }
-    bool near_departure = now >= f.scheduled_departure - 600;
-    if (!app_tracker_terminal(&f) && near_departure && now >= f.next_motion) {
+    int64_t effective_departure = f.display.tracked_flight_estimated_departure_unix;
+    if (!effective_departure) effective_departure = f.scheduled_departure;
+    bool near_departure = app_tracker_airborne(&f) || now >= effective_departure - 600;
+    if (!app_tracker_terminal(&f) && !app_tracker_diverted(&f) && near_departure && now >= f.next_motion) {
         f.next_motion = now + 60;
+        int64_t prior_contact = f.contact_unix, prior_position = f.position_unix;
         bool ok = cfg.opensky_enabled && motion(&f, now);
+        bool deferred = cfg.opensky_enabled && f.http_status == APP_OPENSKY_DEFERRED;
         if (ok)
             f.missing_since = 0;
-        else if (!f.missing_since)
+        else if (!deferred && !f.missing_since)
             f.missing_since = now;
-        if (!ok && app_tracker_airborne(&f) &&
+        if (!ok && !deferred && app_tracker_airborne(&f) &&
             (f.position_unix == 0 || now - f.missing_since >= 300) &&
             (!f.last_fallback || now - f.last_fallback >= 300) && *cfg.flightaware_api_key &&
             *f.provider_id) {
@@ -515,11 +527,12 @@ void app_tracker_tick(void)
                 snprintf(url, sizeof(url),
                          "https://aeroapi.flightaware.com/aeroapi/flights/%s/position", id);
                 cJSON *root = request(url, cfg.flightaware_api_key, &f.http_status);
-                app_tracker_parse_position(&f, root, time(NULL));
+                ok = app_tracker_parse_position(&f, root, time(NULL));
                 cJSON_Delete(root);
             }
         }
-        f.checked_unix = time(NULL);
+        if (ok || f.position_unix > prior_position || f.contact_unix > prior_contact)
+            f.checked_unix = time(NULL);
         changed = true;
     }
     app_tracker_reconcile(&f, time(NULL));

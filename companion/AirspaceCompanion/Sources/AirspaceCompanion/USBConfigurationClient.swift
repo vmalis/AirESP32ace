@@ -27,6 +27,7 @@ struct USBConfigurationClient: Sendable {
         case deviceNotConnected
         case openFailed(String)
         case configureFailed
+        case readFailed
         case writeFailed
         case timedOut
         case deviceRejected(String)
@@ -41,6 +42,8 @@ struct USBConfigurationClient: Sendable {
                 "Could not open the USB connection at \(port)."
             case .configureFailed:
                 "Could not configure the USB serial connection."
+            case .readFailed:
+                "The USB connection was lost while reading the device response."
             case .writeFailed:
                 "Could not send configuration data over USB-C."
             case .timedOut:
@@ -50,7 +53,7 @@ struct USBConfigurationClient: Sendable {
             case .invalidResponse:
                 "The device returned an invalid configuration response."
             case let .stateVerificationFailed(message):
-                "The device received the state but did not retain the expected tracked flight: \(message)"
+                "Could not verify the device package: \(message)"
             }
         }
     }
@@ -286,10 +289,12 @@ struct USBConfigurationClient: Sendable {
         port: String? = nil,
         launchPackage: Bool = false,
         expectedFlightNumber: String? = nil,
+        trackedProof: TrackedPackageProof? = nil,
         expectedClearedFlight: Bool = false,
         progress: (@Sendable (TransferProgress) -> Void)? = nil,
         finalizing: (@Sendable () -> Void)? = nil
     ) async throws {
+        try trackedProof?.checkUSBAssetNames(assets.map(\.name))
         let selectedPort = try resolvedPort(port)
         guard let json = String(data: state, encoding: .utf8) else {
             throw ClientError.invalidResponse
@@ -370,8 +375,14 @@ struct USBConfigurationClient: Sendable {
                 expectedFlightNumber: expectedFlightNumber,
                 expectedClearedFlight: expectedClearedFlight,
                 expectedRouteMapMask: expectedFlightNumber == nil ? nil : 3,
-                expectedRouteFlagMask: expectedFlightNumber == nil ? nil : 3
+                expectedRouteFlagMask: expectedFlightNumber == nil ? nil : 3,
+                expectedDeviceSlot: trackedProof?.active.slot
             )
+            if let trackedProof {
+                // Never reopen this port between queue activation and proof.
+                try trackedProof.verify(Self.transact(descriptor: descriptor, pending: &pending,
+                    command: "ASTTRACK:GET\n", timeout: 8), requireSlots: capabilities.contains("SLOTS1"))
+            }
         }.value
     }
 
@@ -542,7 +553,8 @@ struct USBConfigurationClient: Sendable {
         expectedFlightNumber: String?,
         expectedClearedFlight: Bool,
         expectedRouteMapMask: Int?,
-        expectedRouteFlagMask: Int?
+        expectedRouteFlagMask: Int?,
+        expectedDeviceSlot: Int? = nil
     ) throws {
         try writeAll(
             descriptor: descriptor,
@@ -576,6 +588,9 @@ struct USBConfigurationClient: Sendable {
                     "the previous flight is still active"
                 )
             }
+        }
+        if let expectedDeviceSlot, receipt.deviceSlot != expectedDeviceSlot {
+            throw ClientError.stateVerificationFailed("The active device slot does not match the prescribed flight.")
         }
         if let expectedFlightNumber {
             let expected = normalizedFlightNumber(expectedFlightNumber)
@@ -611,7 +626,8 @@ struct USBConfigurationClient: Sendable {
     private static func waitUntilResponsive(
         descriptor: Int32,
         pending: inout Data,
-        timeout: TimeInterval = 40
+        timeout: TimeInterval = 40,
+        verifyPair: Bool = true
     ) throws {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
@@ -628,6 +644,11 @@ struct USBConfigurationClient: Sendable {
                     timeout: min(1.25, max(0.1, deadline.timeIntervalSinceNow))
                 )
                 if line == pongPrefix + "READY" {
+                    if verifyPair {
+                        guard let paired = DevicePairing.stored() else { throw PairingFailure.unpaired }
+                        let id = try readIdentity(descriptor, pending: &pending)
+                        guard id.deviceId == paired.deviceId else { throw PairingFailure.identity }
+                    }
                     return
                 }
             } catch ClientError.timedOut {
@@ -635,6 +656,93 @@ struct USBConfigurationClient: Sendable {
             }
         }
         throw ClientError.timedOut
+    }
+
+    private static func readIdentity(_ fd: Int32, pending: inout Data) throws -> BoardIdentity {
+        let bytes = try transact(descriptor: fd, pending: &pending, command: "ASTCFG:IDENTITY\n", timeout: 4)
+        return try JSONDecoder().decode(BoardIdentity.self, from: bytes)
+    }
+
+    static func identity(port: String, pairing: Bool = false, expectedBoard: String? = nil) async throws -> BoardIdentity {
+        try await Task.detached {
+            let lease = USBSerialAccess.acquire()
+            defer { lease.release() }
+            let fd = try openConfiguredPort(port)
+            defer { Darwin.close(fd) }
+            var pending = Data()
+            try waitUntilResponsive(descriptor: fd, pending: &pending, timeout: 4, verifyPair: false)
+            let id = try readIdentity(fd, pending: &pending)
+            if let expectedBoard, expectedBoard != id.deviceId { throw PairingFailure.identity }
+            if pairing {
+                let (pair, json) = try DevicePairing.make(for: id.deviceId)
+                _ = try transact(descriptor: fd, pending: &pending, command: "ASTCFG:PAIR:\(json)\n", timeout: 8)
+                try pair.save()
+            } else {
+                guard let pair = DevicePairing.stored() else { throw PairingFailure.unpaired }
+                guard pair.deviceId == id.deviceId else { throw PairingFailure.identity }
+            }
+            return id
+        }.value
+    }
+
+    /// Caller holds the exclusive serial lease across flashing and verification.
+    static func verifyBoot(port: String, expected: String, expectedBoard: String?) throws -> BoardIdentity {
+        try verifyBootSession(expected: expected, expectedBoard: expectedBoard,
+                              open: { try openConfiguredPort(port) },
+                              close: { _ = Darwin.close($0) }) { fd, pending in
+            try waitUntilResponsive(descriptor: fd, pending: &pending, timeout: 2, verifyPair: false)
+            return try readIdentity(fd, pending: &pending)
+        }
+    }
+
+    // Opening or closing a native USB serial port can change its control lines.
+    // Keep the same descriptor AND its partial response while the application
+    // starts; release it only on return or actual loss of this connection.
+    static func verifyBootSession(expected: String, expectedBoard: String?,
+                                  open: () throws -> Int32, close: (Int32) -> Void,
+                                  now: () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
+                                  pause: () -> Void = { Thread.sleep(forTimeInterval: 0.35) },
+                                  probe: (Int32, inout Data) throws -> BoardIdentity) throws -> BoardIdentity {
+        let deadline = now() + 45
+        var descriptor: Int32?
+        var pending = Data()
+        defer { if let descriptor { close(descriptor) } }
+        while now() < deadline {
+            if descriptor == nil {
+                do { descriptor = try open() }
+                catch ClientError.openFailed { pause(); continue } // waiting for re-enumeration
+                catch ClientError.configureFailed { pause(); continue }
+            }
+            guard let fd = descriptor else { throw PairingFailure.boot }
+            do {
+                let id = try probe(fd, &pending)
+                guard expectedBoard == nil || expectedBoard == id.deviceId else { throw PairingFailure.identity }
+                guard id.elfSHA256.lowercased() == expected else { throw PairingFailure.boot }
+                return id
+            } catch ClientError.timedOut {
+                // A quiet board isn't a disconnected board. Don't re-open it.
+            } catch is DecodingError {
+                // A partial/malformed identity cannot prove a boot. Try again.
+            } catch let failure as ClientError {
+                switch failure {
+                case .readFailed, .writeFailed:
+                    close(fd)
+                    descriptor = nil
+                    pending.removeAll()
+                default: throw failure
+                }
+            }
+            pause()
+        }
+        throw PairingFailure.boot
+    }
+
+    static func imageELFDigest(_ bytes: Data) throws -> String {
+        // ESP image header (24), segment header (8), esp_app_desc_t hash offset (144).
+        guard bytes.count >= 208, bytes[0] == 0xe9, Array(bytes[32..<36]) == [0x32,0x54,0xcd,0xab] else {
+            throw PairingFailure.boot
+        }
+        return bytes[176..<208].map { String(format: "%02x",$0) }.joined()
     }
 
     private static func capabilities(
@@ -662,10 +770,13 @@ struct USBConfigurationClient: Sendable {
     }
 
     private static func openConfiguredPort(_ port: String) throws -> Int32 {
+        try FirmwareUpdateSafety.checkExclusiveCompanion()
         let descriptor = Darwin.open(port, O_RDWR | O_NOCTTY | O_NONBLOCK)
         guard descriptor >= 0 else {
             throw ClientError.openFailed(port)
         }
+        do { try FirmwareUpdateSafety.claimSerialDescriptor(descriptor) }
+        catch { Darwin.close(descriptor); throw error }
         var options = termios()
         guard tcgetattr(descriptor, &options) == 0 else {
             Darwin.close(descriptor)
@@ -721,7 +832,7 @@ struct USBConfigurationClient: Sendable {
             }
             if result > 0 {
                 sent += result
-            } else if errno == EAGAIN || errno == EWOULDBLOCK {
+            } else if result < 0 && (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) {
                 Thread.sleep(forTimeInterval: 0.002)
             } else {
                 throw ClientError.writeFailed
@@ -768,8 +879,8 @@ struct USBConfigurationClient: Sendable {
                         )
                     }
                 }
-            } else if count < 0 && errno != EAGAIN && errno != EWOULDBLOCK {
-                throw ClientError.invalidResponse
+            } else if count < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR {
+                throw ClientError.readFailed
             } else {
                 Thread.sleep(forTimeInterval: 0.002)
             }

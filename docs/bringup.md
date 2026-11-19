@@ -2,6 +2,12 @@
 
 Target board: Waveshare ESP32-S3-Touch-AMOLED-1.75C.
 
+This is the original prototype bring-up record. Its USB setup examples and
+plaintext HTTP endpoints describe older firmware, not a v0.1.5 upgrade. On
+a configured instrument use **Update Firmware** in the matching companion;
+pair over USB for pinned HTTPS control. Do not erase a working board to
+follow the historical first-install procedure below.
+
 Known from Waveshare docs/repo:
 
 - ESP32-S3R8

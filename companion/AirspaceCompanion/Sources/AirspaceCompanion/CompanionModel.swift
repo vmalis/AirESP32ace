@@ -1240,10 +1240,9 @@ final class CompanionModel: ObservableObject {
             }
             return true
         } catch FlightProviderError.noLiveFlight {
-            flightPlans[planIndex].lastRefreshed = Date()
             if let retainedFlight = resolvedFlights[id] {
                 let now = Date()
-                if retainedFlight.actualDeparture != nil,
+                if retainedFlight.actualDeparture != nil, retainedFlight.journeyPhase != "diverted",
                    let eta = retainedFlight.estimatedArrival,
                    now.timeIntervalSince(eta) >= 30 * 60 {
                     let arrived = retainedFlight.normalizedForTerminalState(
@@ -1283,7 +1282,6 @@ final class CompanionModel: ObservableObject {
             return false
         } catch {
             if let retainedFlight = resolvedFlights[id] {
-                flightPlans[planIndex].lastRefreshed = Date()
                 flightPlans[planIndex].statusSummary =
                     retainedFlight.liveStatusSummary
                 persistFlightPlans()
@@ -1295,7 +1293,6 @@ final class CompanionModel: ObservableObject {
                     "Refresh unavailable · showing the last \(retainedFlight.dataSourceSummary) update"
                 return false
             }
-            flightPlans[planIndex].lastRefreshed = Date()
             flightPlans[planIndex].statusSummary = error.localizedDescription
             resolvedFlights[id] = nil
             persistFlightPlans()
@@ -1313,10 +1310,11 @@ final class CompanionModel: ObservableObject {
 
     private func updatePlan(at index: Int, with flight: TrackedFlight) {
         flightPlans[index].scheduledDeparture = flight.scheduledDeparture
+        flightPlans[index].estimatedDeparture = flight.estimatedDeparture
         flightPlans[index].actualDeparture = flight.actualDeparture
         flightPlans[index].estimatedArrival = flight.estimatedArrival
         flightPlans[index].actualArrival = flight.actualArrival
-        flightPlans[index].lastRefreshed = Date()
+        flightPlans[index].lastRefreshed = flight.lastUpdated ?? flightPlans[index].lastRefreshed
         flightPlans[index].statusSummary = flight.liveStatusSummary
         flightPlans[index].isComplete =
             flight.journeyPhase == "arrived" ||
@@ -1335,8 +1333,9 @@ final class CompanionModel: ObservableObject {
         trackedFlight = displayFlight
         trackedFlightTrackingActive =
             displayFlight.isActivelyTrackable ||
-            displayFlight.journeyPhase == "arrived"
-        routeProgress = displayFlight.journeyPhase == "arrived"
+            displayFlight.journeyPhase == "arrived" || displayFlight.journeyPhase == "cancelled"
+        routeProgress = displayFlight.journeyPhase == "arrived" &&
+            !displayFlight.liveStatusSummary.localizedCaseInsensitiveContains("after diversion")
             ? 1
             : (displayFlight.routeProgress ?? 0)
         flightStatusText =
@@ -1815,39 +1814,114 @@ final class CompanionModel: ObservableObject {
         let targetHost = deviceHost
         let locations = configuredRadarLocations
         pushState = .pushing("Checking device address before installing content…")
+        var confirmedActive: String?
+        var confirmedEmblem: String?
+        var confirmedFlags = false
+        var phase = "active Radar map"
+        var startedWriting = false
         do {
-            let initial = try await deviceClient.fetchStatusSnapshot(host: targetHost)
-            let names = ["sun", "earth", "moon", "iss", "world", "nasa", "roscosm",
-                         "launch_sls", "launch_falcon9", "launch_soyuz", "launch_starship",
-                         "launch_spacex", "launch_florida", "launch_starbase", "launch_baikonur", "iss_flags"]
-            for (index, name) in names.enumerated() {
+            let first = try await contentRepairStatus(host: targetHost)
+            let active = try ActiveRadarRepair(status: first)
+            let activeName = "\(active.location.key) \(active.miles) mi"
+            let verified = try await active.restore(initial: first, prepare: {
+                self.pushState = .pushing("Restoring the device's active Radar map: \(activeName)…")
+                return try await self.localRadarBytes(for: active.location, miles: Double(active.miles), useCache: true)
+            }, read: {
+                try await self.contentRepairStatus(host: targetHost)
+            }, upload: { data in
+                startedWriting = true
+                try await self.deviceClient.pushRadarMap(host: targetHost, rgb565: data,
+                    rangeMiles: Double(active.miles), locationKey: active.location.key)
+            })
+            confirmedActive = activeName
+            var inventory = DeviceContentInventory(verified)
+            var remaining = ContentRepairBudget(free: verified.storageFreeBytes)
+            typealias Artwork = DeviceContentInventory.Artwork
+            let activeKey = active.location.key
+            var expectedIcons = Set<String>()
+            for item in Artwork.order(active: activeKey, cities: locations.map(\.key)) {
                 try Task.checkCancellation()
-                if (initial.spaceAssetFileMask ?? 0) & (1 << index) != 0 { continue }
-                pushState = .pushing("Installing space artwork \(index + 1)/\(names.count)…")
-                let suffix = ["world", "launch_florida", "launch_starbase", "launch_baikonur"].contains(name) ? "rgb" : "rga"
-                let asset = ProjectAssetCatalog.assetRoot.appendingPathComponent("space/\(name).\(suffix)")
-                try await deviceClient.pushSpaceAsset(host: targetHost, name: name, data: Data(contentsOf: asset))
+                switch item {
+                case .emblem(let key): phase = "Weather emblem: \(key)"
+                case .space(let bit): phase = "space artwork: \(Artwork.spaceNames[bit])"
+                }
+                guard let present = inventory.present(item) else { throw ContentRepairError.unknownArtworkInventory }
+                if !present {
+                    pushState = .pushing("Installing \(phase)…")
+                    switch item {
+                    case .emblem(let key):
+                        // An optional custom city with no supplied artwork has
+                        // no canonical replacement. Never invent an emblem.
+                        guard let data = try ProjectAssetCatalog.weatherCityIconData(for: key) else { continue }
+                        try remaining.claim(data.count)
+                        startedWriting = true
+                        try await deviceClient.pushWeatherCityIcon(host: targetHost, data: data, locationKey: key)
+                    case .space(let bit):
+                        let name = Artwork.spaceNames[bit]
+                        let suffix = ["world", "launch_florida", "launch_starbase", "launch_baikonur"].contains(name) ? "rgb" : "rga"
+                        let file = ProjectAssetCatalog.assetRoot.appendingPathComponent("space/\(name).\(suffix)")
+                        let data = try Data(contentsOf: file)
+                        try remaining.claim(data.count)
+                        startedWriting = true
+                        try await deviceClient.pushSpaceAsset(host: targetHost, name: name, data: data)
+                    }
+                    if item == .emblem(activeKey) || item == .issFlags {
+                        let after = try await deviceClient.fetchStatusSnapshot(host: targetHost, mapInventory: true)
+                        guard after.locationKey?.caseInsensitiveCompare(activeKey) == .orderedSame else {
+                            throw ContentRepairError.changedScope
+                        }
+                        inventory = DeviceContentInventory(after)
+                        guard inventory.present(item) == true else { throw ContentRepairError.artworkNotVerified }
+                        // Older firmware may report pre-upload free bytes. The
+                        // new reading can tighten, never replenish, our budget.
+                        if let free = after.storageFreeBytes, let planned = remaining.free {
+                            remaining.free = min(free, planned)
+                        }
+                    }
+                }
+                if case .emblem(let key) = item { expectedIcons.insert(key) }
+                if item == .emblem(activeKey) { confirmedEmblem = activeKey }
+                if item == .issFlags { confirmedFlags = true }
             }
-            for city in locations {
-                try Task.checkCancellation()
-                guard let image = ProjectAssetCatalog.cityImage(for: city.key) else { continue }
-                pushState = .pushing("Installing \(city.key) city artwork…")
-                let data = try ImageWriter.rgb565AlphaData(from: image, width: 128, height: 128)
-                try await deviceClient.pushWeatherCityIcon(host: targetHost, data: data, locationKey: city.key)
+            phase = "remaining city maps"
+            try await pushAllLocalRadarMaps(host: targetHost, locations: locations, useCache: true, skipping: inventory) {
+                try remaining.claim(ActiveRadarRepair.mapBytes)
+                startedWriting = true
             }
-            try await pushAllLocalRadarMaps(host: targetHost, locations: locations, useCache: true)
-            pushState = .pushing("Verifying installed maps and space artwork…")
-            let receipt = try await deviceClient.fetchStatusSnapshot(host: targetHost, mapInventory: true)
-            let inventory = Set((receipt.radarMapInventory ?? "").split(separator: ",").map(String.init))
-            guard receipt.spaceAssetFileMask == 0xffff,
-                  locations.allSatisfy({ inventory.contains("\($0.key):7") }) else {
-                throw USBConfigurationClient.ClientError.stateVerificationFailed("Some maps or artwork are missing. Retry Install device content.")
+            phase = "final inventory"
+            pushState = .pushing("Verifying installed maps and artwork…")
+            let receipt = DeviceContentInventory(try await deviceClient.fetchStatusSnapshot(host: targetHost, mapInventory: true))
+            guard receipt.isComplete(cities: locations, expectedIcons: expectedIcons, spaceAssetCount: Artwork.spaceNames.count) else {
+                throw CompanionSyncError.incompleteContentRepair
             }
             deviceLastSyncedAt = Date()
             pushState = .pushed("Device content verified · \(locations.count) cities × 3 maps · all space artwork")
         } catch {
-            pushState = .failed("Content install failed: \(error.localizedDescription)")
+            var detail = error.localizedDescription
+            if case let DeviceClientError.httpStatus(code, _) = error { detail = "Device returned HTTP \(code)." }
+            if startedWriting, let status = try? await deviceClient.fetchStatusSnapshot(host: targetHost) {
+                if let free = status.storageFreeBytes { detail += " Device reports \(free) bytes free." }
+                if let number = status.storageWriteErrno, number > 0 { detail += " Last device storage errno: \(number)." }
+            }
+            var prefix = confirmedActive.map { "Active Radar map \($0) verified. " } ?? ""
+            if let confirmedEmblem { prefix += "Weather emblem \(confirmedEmblem) verified. " }
+            if confirmedFlags { prefix += "ISS flags verified. " }
+            pushState = .failed("\(prefix)Content repair stopped (\(phase)): \(detail)")
         }
+    }
+
+    private func contentRepairStatus(host: String) async throws -> DeviceClient.StatusSnapshot {
+        var status = try await deviceClient.fetchStatusSnapshot(host: host, mapInventory: true)
+        if status.radarRadiusMiles == nil {
+            // Earlier firmware exposes its saved active range only via this
+            // paired, read-only endpoint. Never substitute a Mac preference.
+            let config = try await deviceClient.fetchConfig(host: host)
+            guard let key = status.locationKey, key.caseInsensitiveCompare(config.device.location.key) == .orderedSame else {
+                throw ContentRepairError.changedScope
+            }
+            status.radarRadiusMiles = config.device.radarRadiusMiles
+        }
+        return status
     }
 
     func refreshLiveAndPushToDevice() async {
@@ -1865,46 +1939,24 @@ final class CompanionModel: ObservableObject {
         let connectedUSBPort = DeviceSerialDiscovery.preferredPort()
 
         do {
-            let snapshot = try await deviceClient.fetchStatusSnapshot(host: deviceHost)
-            applyDeviceStatus(snapshot)
-            if let connectedUSBPort {
+            if let port = connectedUSBPort {
+                let identity = try await USBConfigurationClient.identity(port: port)
+                if !identity.ip.isEmpty && identity.ip != "0.0.0.0" { deviceHost = identity.ip }
+                deviceReachable = true
                 deviceReachabilityTransport = .usb
-                deviceStatusText =
-                    "Device connected over USB-C at \(connectedUSBPort)"
+                deviceStatusText = "Paired tracker verified over USB-C at \(port)"
+                if announce { pushState = .pushed(deviceStatusText) }
             } else {
-                deviceStatusText =
-                    "Device reachable at \(snapshot.ip ?? deviceHost)"
+                let snapshot = try await deviceClient.fetchStatusSnapshot(host: deviceHost)
+                applyDeviceStatus(snapshot)
+                deviceStatusText = "Paired tracker reachable at \(snapshot.ip ?? deviceHost)"
+                if announce { pushState = .pushed(deviceStatusText) }
             }
-            if announce {
-                pushState = .pushed(
-                    connectedUSBPort == nil
-                        ? "Device reachable over Wi-Fi"
-                        : "Device connected over USB-C"
-                )
-            }
-            return
-        } catch let wifiError {
-            guard let port = connectedUSBPort else {
-                deviceReachable = false
-                deviceReachabilityTransport = .offline
-                if announce {
-                    pushState = .failed(
-                        "Status failed: \(wifiError.localizedDescription)"
-                    )
-                }
-                return
-            }
-
-            // Enumeration is the authoritative signal that the tracker is
-            // physically connected. The firmware may be busy rendering or
-            // networking and therefore not answer an ASTCFG probe promptly;
-            // that must not make a plugged-in tracker appear Offline.
-            deviceReachable = true
-            deviceReachabilityTransport = .usb
-            deviceStatusText = "Device connected over USB-C at \(port)"
-            if announce {
-                pushState = .pushed("Device connected over USB-C")
-            }
+        } catch {
+            deviceReachable = false
+            deviceReachabilityTransport = .offline
+            deviceStatusText = error.localizedDescription
+            if announce { pushState = .failed(deviceStatusText) }
         }
     }
 
@@ -2036,11 +2088,9 @@ final class CompanionModel: ObservableObject {
         do {
             try ProjectAssetCatalog.installCityImage(image, for: city.key)
             cityArtworkRevision &+= 1
-            let data = try ImageWriter.rgb565AlphaData(
-                from: image,
-                width: 128,
-                height: 128
-            )
+            guard let data = try ProjectAssetCatalog.weatherCityIconData(for: city.key) else {
+                throw CocoaError(.fileReadNoSuchFile)
+            }
             try await deviceClient.pushWeatherCityIcon(
                 host: deviceHost,
                 data: data,
@@ -2315,16 +2365,15 @@ final class CompanionModel: ObservableObject {
             )
         }
         let packages = try await preparedFlightPackagesForPush()
-        guard !packages.isEmpty, packages.count == flightPlans.count else {
+        guard !packages.isEmpty, packages.count == flightPlans.count,
+              Set(packages.map(\.plan.id)) == Set(flightPlans.map(\.id)) else {
             throw CompanionSyncError.unresolvedTrackedFlight
         }
+        let proof = try TrackedPackageProof(flights: packages.map {
+            .init(slot: $0.slot, id: $0.plan.id, number: $0.flight.marketingNumber)
+        }, activeID: activeFlightPlanID)
         let queue = try deviceClient.encodedTrackerQueue(
-            flights: try packages.map { package in
-                guard let plan = flightPlans.first(where: { $0.deviceSlot == package.slot }) else {
-                    throw CocoaError(.validationMissingMandatoryProperty)
-                }
-                return (plan: plan, flight: package.flight)
-            },
+            flights: packages.map { (plan: $0.plan, flight: $0.flight) },
             credentials: .init(
                 openSky: .init(enabled: true,
                     clientId: openSkyClientID.trimmed.isEmpty ? nil : openSkyClientID.trimmed,
@@ -2388,7 +2437,8 @@ final class CompanionModel: ObservableObject {
                 assets: assets,
                 state: queue,
                 port: port,
-                expectedFlightNumber: trackedFlight.marketingNumber,
+                expectedFlightNumber: proof.active.number,
+                trackedProof: proof,
                 progress: { [weak self] progress in
                     Task { @MainActor [weak self] in
                         guard let self,
@@ -2559,15 +2609,11 @@ final class CompanionModel: ObservableObject {
             throw error
         }
         try await deviceClient.pushTrackerQueue(host: deviceHost, data: queue)
-        let receipt = try await deviceClient.fetchTracker(host: deviceHost)
-        guard receipt.preparedFlightCount == packages.count,
-              Self.normalizedFlightNumber(receipt.flightNumber ?? "") ==
-                Self.normalizedFlightNumber(trackedFlight.marketingNumber) else {
-            throw USBConfigurationClient.ClientError.stateVerificationFailed("The device did not retain the complete flight queue and select the next flight.")
-        }
+        try proof.verify(await deviceClient.fetchTrackerData(host: deviceHost))
         let snapshot = try await deviceClient.fetchStatusSnapshot(host: deviceHost)
         guard snapshot.trackedFlightValid, snapshot.routeMapMask == 3,
-              snapshot.routeFlagMask == 3 else {
+              snapshot.routeFlagMask == 3,
+              TrackedPackageProof.number(snapshot.trackedFlightNumber) == TrackedPackageProof.number(proof.active.number) else {
             throw USBConfigurationClient.ClientError.stateVerificationFailed("The next flight is missing its maps or flags.")
         }
         deviceReachabilityTransport = .wifi
@@ -2575,6 +2621,7 @@ final class CompanionModel: ObservableObject {
     }
 
     private struct PreparedFlightPackage {
+        let plan: PlannedFlight
         let slot: Int
         let flight: TrackedFlight
         let globe: Data
@@ -2586,12 +2633,12 @@ final class CompanionModel: ObservableObject {
     private func preparedFlightPackagesForPush() async throws -> [PreparedFlightPackage] {
         var packages: [PreparedFlightPackage] = []
         for (planIndex, plan) in flightPlans.enumerated() {
-            guard let flight = resolvedFlights[plan.id] else { continue }
+            guard let flight = resolvedFlights[plan.id] else { throw CompanionSyncError.unresolvedTrackedFlight }
             pushState = .pushing(
                 "Checking cached maps \(planIndex + 1)/\(flightPlans.count)…"
             )
             let cachedAssets: () -> (ImageWriter.DeviceImageAsset, ImageWriter.DeviceImageAsset)? = {
-                guard plan.mapsPreparedAt != nil else { return nil }
+                guard plan.mapsPreparedAt != nil, let slot = plan.deviceSlot, (0..<4).contains(slot) else { return nil }
                 let stem = self.flightAssetStem(
                     plan: plan,
                     flightNumber: flight.marketingNumber
@@ -2604,6 +2651,8 @@ final class CompanionModel: ObservableObject {
                         name: "\(stem)_route_map_466"
                     )
                 else { return nil }
+                let expected = 466 * 466 * 2
+                guard [globe, frame].allSatisfy({ (try? $0.rgb565URL.resourceValues(forKeys: [.fileSizeKey]).fileSize) == expected }) else { return nil }
                 return (globe, frame)
             }
             if cachedAssets() == nil {
@@ -2626,8 +2675,10 @@ final class CompanionModel: ObservableObject {
                     )
                 )
             }
-            guard let refreshedPlan = flightPlans.first(where: { $0.id == plan.id }) else {
-                continue
+            guard let refreshedPlan = flightPlans.first(where: { $0.id == plan.id }),
+                  refreshedPlan.mapsPreparedAt != nil,
+                  let slot = refreshedPlan.deviceSlot, (0..<4).contains(slot) else {
+                throw CompanionSyncError.unresolvedTrackedFlight
             }
             let stem = flightAssetStem(
                 plan: refreshedPlan,
@@ -2639,20 +2690,13 @@ final class CompanionModel: ObservableObject {
             let frameAsset = try ImageWriter.existingDeviceImage(
                 name: "\(stem)_route_map_466"
             )
-            packages.append(
-                .init(
-                    slot: max(0, min(3, refreshedPlan.deviceSlot ?? 0)),
-                    flight: flight,
-                    globe: try Data(contentsOf: globeAsset.rgb565URL),
-                    frame: try Data(contentsOf: frameAsset.rgb565URL),
-                    originFlag: try FlagRenderer.rgb565Flag(
-                        countryCode: flight.origin.countryCode
-                    ),
-                    destinationFlag: try FlagRenderer.rgb565Flag(
-                        countryCode: flight.destination.countryCode
-                    )
-                )
-            )
+            let package = try PreparedFlightPackage(plan: refreshedPlan, slot: slot, flight: flight,
+                globe: Data(contentsOf: globeAsset.rgb565URL), frame: Data(contentsOf: frameAsset.rgb565URL),
+                originFlag: FlagRenderer.trackedEndpoint(flight.origin),
+                destinationFlag: FlagRenderer.trackedEndpoint(flight.destination))
+            try TrackedPackageProof.checkImages(globe: package.globe, frame: package.frame,
+                originFlag: package.originFlag, destinationFlag: package.destinationFlag)
+            packages.append(package)
             syncProgress = 0.02 +
                 (Double(planIndex + 1) / Double(max(1, flightPlans.count))) * 0.08
         }
@@ -2687,10 +2731,23 @@ final class CompanionModel: ObservableObject {
             let planIndex = flightPlans.firstIndex(where: { $0.id == planID }),
             let flight = resolvedFlights[planID]
         else { return }
-        let plan = flightPlans[planIndex]
-
         renderState = .rendering
         do {
+            // Assign before constructing either filename. Previously a legacy
+            // plan with no slot rendered both maps into s0, then claimed another
+            // slot and could later load old bytes from that slot instead.
+            if flightPlans[planIndex].deviceSlot == nil {
+                let used = Set(flightPlans.compactMap(\.deviceSlot))
+                guard let free = (0..<4).first(where: { !used.contains($0) }) else {
+                    throw TrackedPackageProof.fail("No unclaimed device slot is available.")
+                }
+                flightPlans[planIndex].deviceSlot = free
+            }
+            let plan = flightPlans[planIndex]
+            guard let slot = plan.deviceSlot, (0..<4).contains(slot),
+                  !flightPlans.contains(where: { $0.id != plan.id && $0.deviceSlot == slot }) else {
+                throw TrackedPackageProof.fail("The flight's device slot is invalid or assigned twice.")
+            }
             let progress = max(0, min(1, flight.routeProgress ?? 0))
             async let geodesicImage = geodesicMapRenderer.renderMap(
                 for: flight,
@@ -2703,6 +2760,10 @@ final class CompanionModel: ObservableObject {
                 size: .init(width: 466, height: 466)
             )
             let (geodesic, frame) = try await (geodesicImage, frameImage)
+            guard let current = flightPlans.first(where: { $0.id == planID }), current.deviceSlot == slot,
+                  current.departureDate == plan.departureDate, current.legSelection == plan.legSelection else {
+                throw TrackedPackageProof.fail("The prescribed flight changed while rendering its artwork.")
+            }
             let stem = flightAssetStem(
                 plan: plan,
                 flightNumber: flight.marketingNumber
@@ -2715,12 +2776,8 @@ final class CompanionModel: ObservableObject {
                 frame,
                 name: "\(stem)_route_map_466"
             )
-            _ = try FlagRenderer.rgb565Flag(
-                countryCode: flight.origin.countryCode
-            )
-            _ = try FlagRenderer.rgb565Flag(
-                countryCode: flight.destination.countryCode
-            )
+            _ = try FlagRenderer.trackedEndpoint(flight.origin)
+            _ = try FlagRenderer.trackedEndpoint(flight.destination)
 
             guard let completedPlanIndex = flightPlans.firstIndex(where: {
                 $0.id == planID
@@ -2728,10 +2785,6 @@ final class CompanionModel: ObservableObject {
                 return
             }
             flightPlans[completedPlanIndex].mapsPreparedAt = Date()
-            if flightPlans[completedPlanIndex].deviceSlot == nil {
-                flightPlans[completedPlanIndex].deviceSlot = plan.deviceSlot ??
-                    firstAvailableFlightSlot()
-            }
             persistFlightPlans()
             if updatePreview {
                 latestGeodesicMapImage = geodesic
@@ -2944,34 +2997,37 @@ final class CompanionModel: ObservableObject {
     private func pushAllLocalRadarMaps(
         host: String? = nil,
         locations selectedLocations: [RadarLocationPreset]? = nil,
-        useCache: Bool = false
+        useCache: Bool = false,
+        skipping inventory: DeviceContentInventory? = nil,
+        beforeMissingMap: (() throws -> Void)? = nil
     ) async throws {
         let targetHost = host ?? deviceHost
         let locations = selectedLocations ?? configuredRadarLocations
-        let total = locations.count * LocalRadarMapRenderer.supportedRadiusMiles.count
-        var completed = 0
-        for location in locations {
-            for radiusMiles in LocalRadarMapRenderer.supportedRadiusMiles {
-                try Task.checkCancellation()
-                // Only fixed built-in coordinates can safely use the legacy
-                // name-only cache. Rebuild maps always renders fresh plates.
-                let cached = useCache && RadarLocationPreset.catalog.contains(location)
-                    ? try? ImageWriter.existingDeviceImage(name: "\(location.key)_radar_map_\(Int(radiusMiles))mi_466")
-                    : nil
-                let asset: ImageWriter.DeviceImageAsset
-                if let cached,
-                   (try? Data(contentsOf: cached.rgb565URL).count) == 466 * 466 * 2 {
-                    asset = cached
-                } else {
-                    asset = try await renderLocalRadarMapAsset(location: location, radiusMiles: radiusMiles)
-                }
-                let rgb565 = try Data(contentsOf: asset.rgb565URL)
-                completed += 1
-                pushState = .pushing("Uploading \(location.key) \(Int(radiusMiles)) mi radar map \(completed)/\(total)…")
-                try await deviceClient.pushRadarMap(host: targetHost, rgb565: rgb565, rangeMiles: radiusMiles, locationKey: location.key)
-                try await Task.sleep(nanoseconds: 350_000_000)
+        let jobs = DeviceContentInventory.radarJobs(for: locations, skipping: inventory)
+        for (index, job) in jobs.enumerated() {
+            let (location, radiusMiles) = job
+            try Task.checkCancellation()
+            if let inventory, inventory.radarPresent(key: location.key, miles: Int(radiusMiles)) == nil {
+                throw ContentRepairError.unknownInventory
             }
+            try beforeMissingMap?()
+            let rgb565 = try await localRadarBytes(for: location, miles: radiusMiles, useCache: useCache)
+            pushState = .pushing("Uploading \(location.key) \(Int(radiusMiles)) mi radar map \(index + 1)/\(jobs.count)…")
+            try await deviceClient.pushRadarMap(host: targetHost, rgb565: rgb565, rangeMiles: radiusMiles, locationKey: location.key)
+            try await Task.sleep(nanoseconds: 350_000_000)
         }
+    }
+
+    private func localRadarBytes(for location: RadarLocationPreset, miles: Double, useCache: Bool) async throws -> Data {
+        if useCache, RadarLocationPreset.catalog.contains(location),
+           let asset = try? ImageWriter.existingDeviceImage(name: "\(location.key)_radar_map_\(Int(miles))mi_466"),
+           let data = try? Data(contentsOf: asset.rgb565URL), data.count == ActiveRadarRepair.mapBytes {
+            return data
+        }
+        let asset = try await renderLocalRadarMapAsset(location: location, radiusMiles: miles)
+        let data = try Data(contentsOf: asset.rgb565URL)
+        guard data.count == ActiveRadarRepair.mapBytes else { throw ContentRepairError.invalidMap }
+        return data
     }
 
     private var hasLiveTrackedFlightProvider: Bool {
@@ -3734,6 +3790,7 @@ private extension String {
 }
 
 private enum CompanionSyncError: LocalizedError {
+    case incompleteContentRepair
     case incompleteTrackedFlightSync(
         expectedFlight: String,
         receivedFlight: String,
@@ -3744,6 +3801,8 @@ private enum CompanionSyncError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
+        case .incompleteContentRepair:
+            return "The device could not confirm all requested city maps and artwork. Retry Install device content."
         case .incompleteTrackedFlightSync(
             let expectedFlight,
             let receivedFlight,

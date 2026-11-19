@@ -2,6 +2,7 @@
 // Created by VM, August 2026
 
 #include "tracker.h"
+#include "tracker_storage.h"
 #include <assert.h>
 #include <math.h>
 #include <stdio.h>
@@ -35,8 +36,43 @@ static cJSON *state(double lat, double lon, int64_t position, int64_t contact, c
     assert(r);
     return r;
 }
+static void durable_queue(void)
+{
+    /* Synthetic binary fixture at the v0.1.4 Xtensa offsets (host size_t
+     * differs); includes an inactive slot and persisted paid-call cooldown. */
+    unsigned char legacy[13464] = {0};
+    uint32_t header[] = {0x54524b31, sizeof(legacy), 1, 0};
+    memcpy(legacy, header, sizeof(header));
+    uint8_t *row = legacy + 16;
+    row[8] = 1;
+    strcpy((char *)row + 10, "XX101");
+    strcpy((char *)row + 3024, "fixture-plan");
+    strcpy((char *)row + 2985, "A12");
+    row[3017] = 2;
+    int64_t cooldown = 1789000000;
+    memcpy(row + 3288, &cooldown, 8);
+    uint32_t h = 2166136261U;
+    for (unsigned i=0; i<13456; i++) h = (h ^ legacy[i]) * 16777619U;
+    memcpy(legacy+13456,&h,4);
+    FILE *file = tmpfile(); assert(file);
+    assert(fwrite(legacy,1,sizeof(legacy),file) == sizeof(legacy)); rewind(file);
+    tracker_store_t s, roundtrip;
+    assert(app_tracker_store_read(file,&s)); fclose(file);
+    assert(s.count == 1 && s.active == 0 && s.flights[0].last_fallback == cooldown);
+    assert(s.flights[0].display.tracked_flight_slot == 2 &&
+           !strcmp(s.flights[0].display.tracked_flight_origin_gate,"A12"));
+    s.flights[0].origin_zone = (app_tracker_zone_t){.count=2,.at={1, 1000},.offset={3600,7200}};
+    s.asset_generation = UINT32_MAX;
+    file = tmpfile(); assert(file && app_tracker_store_write(file,&s)); rewind(file);
+    assert(app_tracker_store_read(file,&roundtrip)); assert(!memcmp(&s,&roundtrip,sizeof(s)));
+    assert(fseek(file, 42, SEEK_SET)==0); fputc(0x10,file); rewind(file);
+    assert(!app_tracker_store_read(file,&roundtrip)); fclose(file);
+    file = tmpfile(); assert(file); assert(fwrite(legacy,1,100,file)==100); rewind(file);
+    assert(!app_tracker_store_read(file,&roundtrip)); fclose(file);
+}
 int main(void)
 {
+    durable_queue();
     app_tracker_flight_t f = flight();
     app_tracker_flight_t repair = flight();
     f.display.route_progress = 0.6;
@@ -178,7 +214,8 @@ int main(void)
     queue[1].scheduled_departure = arrival + 3600;
     queue[1].display.tracked_flight_actual_departure_unix = 0;
     strcpy(queue[1].display.tracked_flight_journey_phase, "preflight");
-    assert(app_tracker_select(queue, 2, 0, arrival + 60) == 0);
+    assert(app_tracker_select(queue, 2, 0, arrival - 1) == 0);
+    assert(app_tracker_select(queue, 2, 0, arrival + 60) == 1);
     assert(app_tracker_select(queue, 2, 0, arrival + 3600) == 1);
     queue[0] = flight(); // An active flight cannot be displaced by the next timetable entry.
     assert(app_tracker_select(queue, 2, 0, arrival + 3600) == 0);
@@ -209,5 +246,41 @@ int main(void)
     assert(app_tracker_select(upcoming, 4, -1, now) == 0);
     assert(upcoming[0].display.tracked_flight_estimated_departure_unix - now == 7 * 86400);
     assert(app_tracker_select(upcoming, 4, 3, now) == 0);
+    f = upcoming[0];
+    strcpy(f.provider_id, "matched");
+    strcpy(f.display.tracked_flight_origin_gate, "B7");
+    strcpy(f.display.tracked_flight_destination_gate, "B8");
+    unsigned fields = 0;
+    r = cJSON_Parse("{\"flights\":[{\"fa_flight_id\":\"matched\",\"gate_origin\":null}]}");
+    assert(app_tracker_parse_schedule_fields(&f,r,true,now,&fields)); cJSON_Delete(r);
+    assert(fields == 1 && !*f.display.tracked_flight_origin_gate && !strcmp(f.display.tracked_flight_destination_gate,"B8"));
+    r = cJSON_Parse("{\"flights\":[{\"fa_flight_id\":\"matched\",\"cancelled\":true}]}");
+    assert(app_tracker_parse_schedule(&f,r,true,now)); cJSON_Delete(r);
+    app_tracker_reconcile(&f,now+7199);
+    assert(f.display.tracked_flight_valid && app_tracker_terminal(&f) && !app_tracker_airborne(&f));
+    assert(!strcmp(f.display.tracked_flight_status,"Cancelled") && f.display.route_progress==0);
+    assert(!f.display.tracked_flight_actual_arrival_unix && !app_tracker_schedule_due(&f,now+60));
+    assert(app_tracker_select(&f,1,-1,now)==0);
+    app_tracker_reconcile(&f,now+7200); assert(!f.display.tracked_flight_valid);
+    f = flight(); strcpy(f.provider_id,"diversion-test");
+    r = cJSON_Parse("{\"flights\":[{\"fa_flight_id\":\"diversion-test\",\"diverted\":true}]}");
+    assert(app_tracker_parse_schedule(&f,r,true,now)); cJSON_Delete(r);
+    app_tracker_reconcile(&f,now); assert(!f.display.route_progress && !app_tracker_terminal(&f) && app_tracker_diverted(&f));
+    assert(!strcmp(f.display.tracked_flight_status,"Diverted"));
+    r = cJSON_Parse("{\"flights\":[{\"fa_flight_id\":\"diversion-test\",\"actual_on\":1789252700}]}");
+    assert(app_tracker_parse_schedule(&f,r,true,now)); cJSON_Delete(r);
+    app_tracker_reconcile(&f,now); assert(!f.display.route_progress && app_tracker_terminal(&f));
+    assert(!strcmp(f.display.tracked_flight_status,"Landed after diversion"));
+    app_tracker_flight_t fresh_plan = flight(); assert(!app_tracker_diverted(&fresh_plan));
+    f = upcoming[0];
+    r = cJSON_Parse("[[1789000000,-18000],[1793512800,-21600]]");
+    assert(app_tracker_decode_zone(r,&f.origin_zone)); cJSON_Delete(r);
+    f.display.tracked_flight_estimated_departure_unix=1793512799;
+    app_tracker_reconcile(&f,1793512800);
+    assert(f.display.tracked_flight_origin_current_utc_offset_s==-21600);
+    assert(f.display.tracked_flight_departure_utc_offset_s==-18000);
+    f.display.tracked_flight_estimated_departure_unix++;
+    app_tracker_reconcile(&f,1793512800);
+    assert(f.display.tracked_flight_departure_utc_offset_s==-21600);
     puts("Tracker policy tests passed (geometry, stale samples, identity, estimation, lifecycle).");
 }

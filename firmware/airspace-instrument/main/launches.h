@@ -23,6 +23,8 @@ bool app_launch_accept(app_launch_entry_t *entry, const cJSON *json, unsigned ag
 bool app_launch_terminal(int status_id);
 bool app_launch_expired(const app_launch_entry_t *entry, int64_t now);
 bool app_launch_stale(const app_launch_entry_t *entry, int64_t now);
+bool app_launch_stale_for_mask(const app_launch_entry_t *entry, int64_t now, uint8_t enabled);
+int64_t app_launch_next_check(const app_launch_entry_t *entry, int64_t now);
 int64_t app_launch_interval(const app_launch_entry_t *entry, int64_t now);
 int64_t app_launch_failure_interval(unsigned failures);
 int64_t app_launch_budget_due(const int64_t attempts[APP_LAUNCH_REQUESTS_PER_HOUR], int64_t now);

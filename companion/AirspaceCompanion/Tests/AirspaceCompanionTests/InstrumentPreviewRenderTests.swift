@@ -198,17 +198,21 @@ final class InstrumentPreviewRenderTests: XCTestCase {
     }
 
     func testNativeViewPresentsFramebufferWithoutMirroring() throws {
-        let width = 3
-        let height = 2
-        let bytes: [UInt8] = [
-            255, 0, 0, 255,
-            0, 255, 0, 255,
-            0, 0, 255, 255,
-            255, 255, 0, 255,
-            0, 255, 255, 255,
-            255, 0, 255, 255,
+        // Use patch centers rather than interpolated borders. AppKit can
+        // cache a 120×80-point view as a 240×160-pixel Retina bitmap.
+        let patchSize = 40
+        let width = 3 * patchSize
+        let height = 2 * patchSize
+        let patches: [[UInt8]] = [
+            [255, 0, 0, 255], [0, 255, 0, 255], [0, 0, 255, 255],
+            [255, 255, 0, 255], [0, 255, 255, 255], [255, 0, 255, 255],
         ]
-        let data = Data(bytes)
+        var data = Data(capacity: width * height * 4)
+        for y in 0..<height {
+            for x in 0..<width {
+                data.append(contentsOf: patches[(y / patchSize) * 3 + x / patchSize])
+            }
+        }
         guard
             let provider = CGDataProvider(data: data as CFData),
             let source = CGImage(
@@ -250,11 +254,14 @@ final class InstrumentPreviewRenderTests: XCTestCase {
         let expected = NSBitmapImageRep(cgImage: source)
         var uprightError = 0.0
         var mirroredError = 0.0
-        for y in 0..<height {
-            for x in 0..<width {
+        for row in 0..<2 {
+            for column in 0..<3 {
+                let x = column * patchSize + patchSize / 2
+                let y = row * patchSize + patchSize / 2
                 guard
                     let actualColor = rendered
-                        .colorAt(x: x, y: y)?
+                        .colorAt(x: x * rendered.pixelsWide / width,
+                                 y: y * rendered.pixelsHigh / height)?
                         .usingColorSpace(.deviceRGB),
                     let uprightColor = expected
                         .colorAt(x: x, y: y)?

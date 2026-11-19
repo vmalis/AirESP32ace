@@ -8,7 +8,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PACKAGE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 REPOSITORY_DIR="$(cd "$PACKAGE_DIR/../.." && pwd)"
 APP_NAME="AirESP32ace"
-FIRMWARE_RELEASE_NAME="AirESP32ace_181126_v02.bin"
+APP_VERSION="0.1.5"
+FIRMWARE_RELEASE_NAME="AirESP32ace_191126_v03.bin"
 BUNDLE_ID="com.vadimmalis.airspace-companion"
 RENDERER_ID="$BUNDLE_ID.renderer"
 BUILD_CONFIG="${1:-debug}"
@@ -20,6 +21,22 @@ if [[ "$BUILD_CONFIG" == "release" ]]; then
     echo "error: release requires verified credential-free firmware; use a clean AIRSPACE_FIRMWARE_BUILD_DIR." >&2
     exit 1
   fi
+  # The bundle must never silently contain an older application's binary,
+  # omit the installer, or exhaust the factory partition's safety margin.
+  python3 - "$FIRMWARE_BUILD_DIR" "$APP_VERSION" <<'PY'
+import json, sys
+from pathlib import Path
+base, expected = Path(sys.argv[1]), sys.argv[2]
+meta = json.loads((base / "project_description.json").read_text())
+if meta.get("project_version") != expected or meta.get("target") != "esp32s3":
+    raise SystemExit("release requires a matching ESP32-S3 firmware version")
+for name in ["airspace_instrument.bin", "bootloader/bootloader.bin", "partition_table/partition-table.bin"]:
+    if not (base / name).is_file() or not (base / name).stat().st_size:
+        raise SystemExit(f"missing firmware component: {name}")
+spare = 0x500000 - (base / "airspace_instrument.bin").stat().st_size
+if spare < 32 * 1024:
+    raise SystemExit(f"only {spare} bytes of factory flash spare; release floor is 32 KiB")
+PY
 fi
 BUILD_DEVELOPER_DIR="${DEVELOPER_DIR:-$(/usr/bin/xcode-select -p)}"
 BUILD_SWIFT="$(DEVELOPER_DIR="$BUILD_DEVELOPER_DIR" /usr/bin/xcrun --find swift)"
@@ -65,6 +82,14 @@ env DEVELOPER_DIR="$BUILD_DEVELOPER_DIR" \
   "${SWIFT_BUILD_ARGS[@]}"
 
 BINARY_DIR=".build/arm64-apple-macosx/$BUILD_CONFIG"
+# During a hardware test the existing bundle may still be open, e.g. for a
+# board-pairing confirmation. Build a separate signed copy without replacing
+# anything inside the running app. Use a fresh child, not a caller-supplied
+# removal target.
+if [[ "${AIRSPACE_ISOLATED_BUNDLE:-0}" == "1" ]]; then
+  mkdir -p "$BINARY_DIR"
+  BINARY_DIR="$(mktemp -d "$BINARY_DIR/hardware-test.XXXXXX")"
+fi
 # Newer Swift toolchains default to Swift Build and use out/Products, while
 # older SwiftPM uses the target-triple directory. Never package a stale binary
 # left in the old location after a toolchain upgrade.
@@ -159,9 +184,9 @@ cat > "$CONTENTS_PATH/Info.plist" <<PLIST
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
-  <string>0.1.4</string>
+  <string>$APP_VERSION</string>
   <key>CFBundleVersion</key>
-  <string>5</string>
+  <string>8</string>
   <key>LSMinimumSystemVersion</key>
   <string>15.0</string>
   <key>LSApplicationCategoryType</key>

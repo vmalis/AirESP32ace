@@ -52,6 +52,34 @@ final class APICredentialValidatorTests: XCTestCase {
         )
     }
 
+    func testFlightAwareTransientFailuresDoNotInvalidateKey() async {
+        for code in [429, 503] {
+            let validator = makeValidator { Self.response(for: $0, statusCode: code) }
+            let result = await validator.validateFlightAware(apiKey: "test")
+            guard case .unavailable = result else { return XCTFail("Unexpected \(result)") }
+        }
+        let offline = makeValidator { _ in throw URLError(.notConnectedToInternet) }
+        let status = await offline.validateFlightAware(apiKey: "test")
+        XCTAssertEqual(status, .unavailable("Network unavailable"))
+    }
+
+    func testAirLabsUsesFormAndClassifiesProviderErrors() async {
+        for (code, rejected) in [("unknown_api_key", true), ("expired_api_key", true),
+                                 ("month_limit_exceeded", false), ("internal_error", false)] {
+            let validator = makeValidator { request in
+                XCTAssertNil(request.url?.query)
+                XCTAssertEqual(request.httpMethod, "POST")
+                return Self.response(for: request, statusCode: 200, body: ["error":["code":code]])
+            }
+            let status = await validator.validateAirLabs(apiKey: "test")
+            if rejected {
+                guard case .invalid = status else { return XCTFail("Expected rejection") }
+            } else {
+                guard case .unavailable = status else { return XCTFail("Expected temporary failure") }
+            }
+        }
+    }
+
     private func makeValidator(
         handler: @escaping (URLRequest) throws -> (HTTPURLResponse, Data)
     ) -> APICredentialValidator {

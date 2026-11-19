@@ -1,0 +1,56 @@
+AirESP32ace v0.1.5 — firmware update, storage, and connection reliability
+
+Updating an existing instrument
+
+1. Quit the old companion. Unzip the new Apple-silicon app and drag it to
+   Applications. The portable bundle targets macOS 15+ and includes its own
+   firmware tools. It is ad-hoc signed, not notarized.
+2. Connect the intended Waveshare ESP32-S3-Touch-AMOLED-1.75C over USB-C.
+   Choose Update Firmware, not Erase & Set Up. Only the existing application
+   partition is replaced; the updater checks the booted firmware identity.
+3. Choose Pair This Mac over USB before using wireless control. Pairing a
+   different Mac replaces the instrument's previous wireless authorization.
+   Normal provider updates do not require the companion to be running.
+
+Changes
+
+- Wi-Fi retries with bounded backoff rather than stopping after a fixed
+  number of failures. Radar and Tracker share a paced OpenSky request budget.
+- Network and render tasks avoid large stack copies. Tracked-flight progress,
+  countdowns, schedule refreshes and handoff remain device-owned.
+- The firmware will not silently format unreadable, nonblank storage. The
+  companion checks existing content and prioritizes the active Radar map,
+  original-resolution Weather emblem and ISS flags when repairing artwork.
+- Prepared flights retain separate maps and flags. The companion checks
+  each prepared package and verifies what the connected firmware can report.
+  A single transaction receipt on this firmware is not a full per-slot receipt.
+
+Verification and limits
+
+- The release firmware was checked against its source using all 30 compiled
+  application objects; their non-debug bytes matched the objects linked
+  into the hardware-tested image. Eight firmware host suite runners passed.
+- The Mac XCTest run completed 136 tests with zero failures and one skipped
+  (the existing-map startup fixture). The packaged USB helper excludes
+  installation records that can contain local build paths.
+- A second provisioned board booted that same image after an application-only
+  upgrade. Its flight, clock, settings, both route maps and endpoint flags
+  were retained. Radar, Weather and ISS artwork were present after the update.
+- On-device checks exercised the Tracker countdown, live and straight-line
+  routes, Radar maps, Weather emblem, ISS flags and repeated screen changes.
+  One unit had pre-existing unreadable artwork; repair required separate
+  data recovery. A firmware update is not a filesystem recovery tool.
+- With the companion closed, a test unit joined an isolated hotspot after
+  several minutes without service and fetched fresh Radar data. This is
+  not a test of disconnecting an already established link.
+- The established-link drop/rejoin, a continuous 48–72 hour Dock run and
+  installation on a clean second physical Apple-silicon Mac remain unverified.
+
+Downloads
+
+- AirESP32ace-macOS.zip: companion including matching firmware and USB tools.
+- AirESP32ace_191126_v03.bin: application-only firmware at offset 0x10000.
+- bootloader.bin and partition-table.bin: first installation/recovery only.
+- AirESP32ace_v0.1.5_SHA256SUMS.txt: SHA-256 checksums for the four downloads.
+
+Earlier releases, including v0.1.4, remain unchanged.

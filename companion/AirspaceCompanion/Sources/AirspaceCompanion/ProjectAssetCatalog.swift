@@ -5,6 +5,34 @@ import AppKit
 import Foundation
 
 enum ProjectAssetCatalog {
+    private static let cityPNGNames = [
+        "SJC": "SJ.png", "SFO": "SFO.png", "SAN": "SanDiego.png", "JFK": "NY.png",
+        "MOW": "moscow.png", "LED": "StPetersburgh.png", "DUS": "Dusseldorf.png", "ICN": "Seoul.png"
+    ]
+
+    /// Both repair and explicit city-art installation must upload the same pixels.
+    /// Stock RGAs are already in the device's native RGB565 + A8 plane format.
+    static func weatherCityIconData(for rawKey: String, assetRoot root: URL? = nil,
+                                    customDirectory: URL? = nil) throws -> Data? {
+        let key = rawKey.uppercased()
+        guard !key.isEmpty, key.utf8.allSatisfy({
+            (65...90).contains($0) || (48...57).contains($0) || $0 == 45 || $0 == 95
+        }) else { return nil }
+        let side = 128
+        let custom = (customDirectory ?? customCityIconDirectory).appendingPathComponent("\(key).png")
+        if FileManager.default.fileExists(atPath: custom.path) {
+            guard let image = NSImage(contentsOf: custom) else { throw CocoaError(.fileReadCorruptFile) }
+            return try ImageWriter.rgb565AlphaData(from: image, width: side, height: side)
+        }
+        let original = (root ?? assetRoot).appendingPathComponent("weather_city_icons/\(key).rga")
+        // New/custom cities need not have stock artwork. A missing *known* asset
+        // is a packaging error: do not silently skip it or re-encode its menu PNG.
+        if cityPNGNames[key] == nil && !FileManager.default.fileExists(atPath: original.path) { return nil }
+        let data = try Data(contentsOf: original)
+        guard data.count == side * side * 3 else { throw CocoaError(.fileReadCorruptFile) }
+        return data
+    }
+
     static func launchAgencyLogo(for agency: LaunchAgency) -> NSImage? {
         if agency == .spacex {
             return NSImage(
@@ -31,17 +59,7 @@ enum ProjectAssetCatalog {
         if let image = NSImage(contentsOf: custom) {
             return image
         }
-        let fileNames: [String: String] = [
-            "SJC": "SJ.png",
-            "SFO": "SFO.png",
-            "SAN": "SanDiego.png",
-            "JFK": "NY.png",
-            "MOW": "moscow.png",
-            "LED": "StPetersburgh.png",
-            "DUS": "Dusseldorf.png",
-            "ICN": "Seoul.png",
-        ]
-        guard let fileName = fileNames[key] else { return nil }
+        guard let fileName = cityPNGNames[key] else { return nil }
 
         for directory in cityAssetDirectories {
             if let image = NSImage(

@@ -113,11 +113,14 @@ struct TrackedFlight: Identifiable, Hashable, Codable {
     }
 
     func journeyPhase(at now: Date) -> String {
+        if liveStatusSummary.localizedCaseInsensitiveContains("cancelled") ||
+            liveStatusSummary.localizedCaseInsensitiveContains("canceled") { return "cancelled" }
         if actualArrival != nil ||
             liveStatusSummary.localizedCaseInsensitiveContains("arrived") ||
             liveStatusSummary.localizedCaseInsensitiveContains("landed") {
             return "arrived"
         }
+        if liveStatusSummary.localizedCaseInsensitiveContains("diverted") { return "diverted" }
         if hasInferredTerminalState(at: now) {
             return "arrived"
         }
@@ -130,7 +133,7 @@ struct TrackedFlight: Identifiable, Hashable, Codable {
     }
 
     var isActivelyTrackable: Bool {
-        guard journeyPhase != "arrived" else { return false }
+        guard journeyPhase != "arrived", journeyPhase != "cancelled" else { return false }
         let normalizedStatus = liveStatusSummary.lowercased()
         return !normalizedStatus.contains("arrived")
             && !normalizedStatus.contains("landed")
@@ -160,7 +163,20 @@ extension TrackedFlight {
     // Match tracked_should_show_countdown in the shared device renderer.
     static let livePresentationLeadInterval: TimeInterval = 3600
 
+    func trackerNotice(at now: Date = Date()) -> String? {
+        let phase = journeyPhase(at: now)
+        if phase == "cancelled" { return "Flight cancelled" }
+        if liveStatusSummary.localizedCaseInsensitiveContains("diversion") ||
+            liveStatusSummary.localizedCaseInsensitiveContains("diverted") {
+            return phase == "arrived" ? "Landed after diversion" : "Flight diverted"
+        }
+        if phase == "preflight", let departure = estimatedDeparture ?? scheduledDeparture,
+           departure <= now { return "Awaiting departure" }
+        return nil
+    }
+
     func showsScheduledCountdown(at now: Date = Date()) -> Bool {
+        if trackerNotice(at: now) != nil { return true }
         guard journeyPhase(at: now) == "preflight",
               let departure = estimatedDeparture ?? scheduledDeparture else { return false }
         return departure.timeIntervalSince(now) > Self.livePresentationLeadInterval
@@ -233,7 +249,8 @@ extension TrackedFlight {
     /// therefore receives the same landed state.
     func reconciledTerminalState(at now: Date = Date()) -> TrackedFlight {
         let phase = journeyPhase(at: now)
-        if phase == "preflight" {
+        if phase == "preflight" || phase == "cancelled" || phase == "diverted" ||
+            liveStatusSummary.localizedCaseInsensitiveContains("after diversion") {
             // A future occurrence must not inherit today's aircraft motion
             // from a callsign/airframe lookup or an older persisted snapshot.
             var scheduled = self
@@ -242,7 +259,7 @@ extension TrackedFlight {
             scheduled.altitudeMeters = nil
             scheduled.groundSpeedKPH = nil
             scheduled.headingDegrees = nil
-            scheduled.verticalPhase = nil
+            scheduled.verticalPhase = phase == "arrived" ? "landed" : nil
             return scheduled
         }
         guard phase == "arrived" else { return self }
@@ -309,6 +326,7 @@ struct PlannedFlight: Codable, Identifiable, Hashable {
     var departureDate: Date
     let addedAt: Date
     var scheduledDeparture: Date?
+    var estimatedDeparture: Date? = nil
     var actualDeparture: Date?
     var estimatedArrival: Date?
     var actualArrival: Date?
@@ -379,6 +397,7 @@ struct PlannedFlight: Codable, Identifiable, Hashable {
 
     var effectiveDeparture: Date {
         actualDeparture
+            ?? estimatedDeparture
             ?? scheduledDeparture
             ?? Calendar.current.date(
                 byAdding: .hour,
@@ -462,13 +481,10 @@ enum PlannedFlightPriority {
             !$0.isTerminal &&
                 !$0.hasExceededUnconfirmedArrivalWindow(at: now)
         }
-        let retainedArrivals = plans.filter {
-            $0.hasArrived && $0.isWithinPostArrivalRetention(at: now)
-        }
-
-        if let currentPlanID,
-           let landed = retainedArrivals.first(where: { $0.id == currentPlanID }) {
-            return landed
+        let retained = plans.filter {
+            ($0.hasArrived && $0.isWithinPostArrivalRetention(at: now)) ||
+            ($0.isCancelled && ($0.lastRefreshed ?? .distantPast)
+                .addingTimeInterval(PlannedFlight.postArrivalRetentionInterval) > now)
         }
 
         // Within the conservative stale-occurrence window, a flight keeps the
@@ -481,14 +497,15 @@ enum PlannedFlightPriority {
             return current
         }
 
-        // Keep the most recently landed flight visible for two hours, even
-        // after an app restart, before moving to the next scheduled flight.
-        if let landed = retainedArrivals.max(by: {
-            ($0.arrivalReferenceDate ?? .distantPast) <
-                ($1.arrivalReferenceDate ?? .distantPast)
-        }) {
-            return landed
-        }
+        // A terminal notice remains available for two hours, but cannot
+        // displace an airborne flight or an imminent connection.
+        if !available.contains(where: {
+            $0.actualDeparture != nil ||
+                $0.effectiveDeparture <= now.addingTimeInterval(TrackedFlight.livePresentationLeadInterval)
+        }), let notice = retained.max(by: {
+            ($0.arrivalReferenceDate ?? $0.lastRefreshed ?? .distantPast) <
+            ($1.arrivalReferenceDate ?? $1.lastRefreshed ?? .distantPast)
+        }) { return notice }
 
         guard !available.isEmpty else { return nil }
 

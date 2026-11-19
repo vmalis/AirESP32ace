@@ -1,10 +1,10 @@
 # AirESP32ace for macOS
 
-`AirESP32ace-macOS.zip` contains **AirESP32ace.app v0.1.4** for Apple-silicon Macs running **macOS 15 or newer**. It includes the matching `AirESP32ace_181126_v02.bin` firmware, bootloader, partition table, native renderer, and self-contained USB flashing/NVS helper. The receiving Mac does not need Python, ESP-IDF, Homebrew, or Xcode.
+`AirESP32ace-macOS.zip` contains **AirESP32ace.app v0.1.5** for Apple-silicon Macs running **macOS 15 or newer**. It includes the matching `AirESP32ace_191126_v03.bin` firmware, bootloader, partition table, native renderer, and self-contained USB flashing/NVS helper. The receiving Mac does not need Python, ESP-IDF, Homebrew, or Xcode.
 
 Update both app and device firmware. Launch and tracked-flight updates now run on the ESP32; the companion prescribes programs/flights and reads the device's live state. Existing launch artwork can be retained. See [autonomous space launches](../../docs/autonomous-space-launches.md).
 
-Version 0.1.4 adds a worldwide offline IATA/ICAO city-name fallback, repairs old flight labels on Sync without rewinding device progress, gates live Tracker pages until one hour before estimated departure, and shows confirmed delays on the countdown. The installer prevents background USB polling from interrupting flashing and uses an ESP32-S3 watchdog reset after writing. App packaging follows the current Swift toolchain's output directory rather than reusing stale products.
+Version 0.1.5 pairs the Mac over USB for encrypted Wi-Fi control, checks the target and running firmware around an update, and inventories on-device artwork before repairing missing files. To keep existing content, use **Update Firmware**. Then use **Pair This Mac** over USB if wireless control is needed; pairing a different Mac replaces the previous authorization.
 
 FlightAware Personal-tier validation, blank-key preservation, and the portable setup tools from v0.1.3 remain included. After **Set Up New Device**, enter the device's assigned IP under Settings and choose **Install device content**. **Update Firmware** preserves existing settings and artwork. Charlotte and Columbia (South Carolina) are optional replacements within the eight-city limit.
 

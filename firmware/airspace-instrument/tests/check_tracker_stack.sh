@@ -11,7 +11,11 @@ fi
 # Inspect the actual optimized ESP32 build, not the host ABI. In particular,
 # an allocation-error branch used to reserve a 6 KiB status snapshot even
 # during successful map loads, exhausting the nested 16 KiB LVGL stack.
-for tracker_symbol in ensure_map_buffers app_remote_merge_status render_tracked_flight_snapshot; do
+# Route/flag/Radar accessors must not put full status snapshots underneath
+# the render frame. A compiler change previously stopped inlining the
+# by-value status helper and exposed a second ~3 KiB copy on valid routes.
+for tracker_symbol in ensure_map_buffers app_remote_merge_status render_tracked_flight_snapshot \
+    app_remote_get_map_for_view app_remote_get_route_flag app_remote_get_radar_map_for_location; do
     tracker_frame=$("$2" -d --disassemble="$tracker_symbol" "$1" | awk '
         /entry[[:space:]]+a1,/ { print $NF; exit }
     ')

@@ -10,6 +10,7 @@ cc -std=c11 -Wno-deprecated-declarations -fsanitize=address,undefined \
 cc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined \
   -I"$tracker_root/firmware/airspace-instrument/main" -I"$tracker_json" \
   "$tracker_root/firmware/airspace-instrument/main/tracker_policy.c" \
+  "$tracker_root/firmware/airspace-instrument/main/tracker_storage.c" \
   "$tracker_root/firmware/airspace-instrument/tests/tracker_policy_test.c" \
   "$tracker_test_dir/cJSON.o" -lm -o "$tracker_test_dir/tracker_test"
 "$tracker_test_dir/tracker_test"

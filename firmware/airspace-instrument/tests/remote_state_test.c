@@ -2,6 +2,7 @@
 // Created by VM, August 2026
 
 #include "remote.h"
+#include "remote_navigation.h"
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -44,6 +45,17 @@ static app_remote_status_t expected_merge(const app_remote_status_t *old,
 
 int main(void)
 {
+    cJSON *page = cJSON_Parse("{\"style\":\"spaceIss\"}");
+    assert(!strcmp(app_remote_navigation_style(page), "spaceIss"));
+    cJSON_Delete(page);
+    const char *not_navigation[] = {"{\"style\":\"space\",\"trackerQueue\":[]}",
+        "{\"style\":\"space\",\"trackingActive\":false}","{\"launchAgencies\":[\"nasa\"],\"style\":\"launch\"}",
+        "{\"style\":\"space\",\"style\":\"launch\"}","{}","null"};
+    for (unsigned i=0;i<sizeof(not_navigation)/sizeof(*not_navigation);i++) {
+        page=cJSON_Parse(not_navigation[i]); assert(!app_remote_navigation_style(page)); cJSON_Delete(page);
+    }
+    page=cJSON_Parse("{\"style\":23}");
+    assert(app_remote_navigation_style(page) && !*app_remote_navigation_style(page)); cJSON_Delete(page);
     /* ESP-IDF's USB TX ring accepts each write atomically. Large JSON replies
      * must be split below its capacity, including the observed 1939-byte
      * launch snapshot and the maximum configuration response. */

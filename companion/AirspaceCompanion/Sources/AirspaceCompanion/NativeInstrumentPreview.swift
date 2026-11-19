@@ -633,7 +633,8 @@ private final class NativeInstrumentRenderer {
     private let height: DimensionFunction?
     private let stride: DimensionFunction?
     private let rendererError: ErrorFunction?
-    private var lastFrameSignature: UInt64?
+    private let frameGeneration: (@convention(c) () -> UInt32)?
+    private var lastFrameGeneration: UInt32?
 
     private init() {
         let candidates = Self.libraryCandidates
@@ -650,6 +651,7 @@ private final class NativeInstrumentRenderer {
         libraryHandle = handle
 
         guard let handle else {
+            frameGeneration = nil
             initialize = nil
             setPage = nil
             setAccent = nil
@@ -686,6 +688,8 @@ private final class NativeInstrumentRenderer {
             return
         }
 
+        frameGeneration = Self.symbol("airspace_renderer_frame_generation", in: handle,
+                                      as: (@convention(c) () -> UInt32).self)
         initialize = Self.symbol(
             "airspace_renderer_initialize",
             in: handle,
@@ -716,6 +720,16 @@ private final class NativeInstrumentRenderer {
             in: handle,
             as: SetClockCitiesFunction.self
         )
+        // Give the shared C renderer the same optional preset definitions
+        // that are provisioned on the board. This does not add device slots.
+        if let register = Self.symbol("app_location_set_custom_data", in: handle,
+                                      as: SetLocationFunction.self) {
+            RadarLocationPreset.additionalChoices.map { preset in
+                let d = preset.definition
+                return [d.key, d.label, d.lat, d.lon, d.timezone, d.metar, d.radarHalfDegrees]
+                    .joined(separator: "|")
+            }.joined(separator: "\n").withCString { register($0) }
+        }
         setWeatherFunction = Self.symbol(
             "airspace_renderer_set_weather",
             in: handle,
@@ -1412,23 +1426,10 @@ private final class NativeInstrumentRenderer {
             return nil
         }
 
-        let sourceBytes = UnsafeRawPointer(source)
-            .assumingMemoryBound(to: UInt8.self)
-        let frameByteCount =
-            sourceStride * pixelHeight
-        var signature: UInt64 =
-            14_695_981_039_346_656_037
-        for index in 0..<frameByteCount {
-            signature ^= UInt64(sourceBytes[index])
-            signature &*= 1_099_511_628_211
+        if let generation = frameGeneration?() {
+            if !force, generation == lastFrameGeneration { return nil }
+            lastFrameGeneration = generation
         }
-        guard
-            force ||
-            signature != lastFrameSignature
-        else {
-            return nil
-        }
-        lastFrameSignature = signature
 
         var rgba = Data(
             count: pixelWidth * pixelHeight * 4

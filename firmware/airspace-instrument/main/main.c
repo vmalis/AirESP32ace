@@ -4,6 +4,7 @@
 #include <ctype.h>
 #include <math.h>
 #include <stdbool.h>
+#include <stdatomic.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -41,8 +42,10 @@
 #include "clock_hand_assets.h"
 #include "data.h"
 #include "detail_metric_icons.h"
+#include "display_health.h"
 #include "gate_arrow_assets.h"
 #include "locations.h"
+#include "preset_time.h"
 #include "menu_icons.h"
 #include "muller_clock_fonts.h"
 #include "nasalization_font.h"
@@ -134,6 +137,18 @@
 #define SPACE_CITY_MARKER_HIT_RADIUS (SCREEN_SIZE / 4)
 
 static const char *TAG = "airspace";
+/* Read from the USB task without calling LVGL or allocating screen objects. */
+static _Atomic(const char *) last_rendered_page = "startup";
+static _Atomic uint32_t ui_heartbeat;
+static _Atomic uint32_t ui_stack_low_bytes;
+static _Atomic uint32_t radar_background_result;
+static _Atomic uint32_t weather_emblem_width, iss_flag_result;
+const char *app_display_last_rendered_page(void) { return atomic_load(&last_rendered_page); }
+uint32_t app_display_heartbeat(void) { return atomic_load(&ui_heartbeat); }
+uint32_t app_display_stack_low_bytes(void) { return atomic_load(&ui_stack_low_bytes); }
+uint32_t app_display_radar_background(void) { return atomic_load(&radar_background_result); }
+uint32_t app_display_weather_emblem_width(void) { return atomic_load(&weather_emblem_width); }
+uint32_t app_display_iss_flags_result(void) { return atomic_load(&iss_flag_result); }
 
 typedef enum {
     SCREEN_RADAR = 0,
@@ -289,7 +304,7 @@ static uint32_t radar_sweep_gap_count;
 static uint32_t radar_aircraft_move_count;
 #endif
 static int data_poll_ticks;
-static int data_fetched_unix_seen = -1;
+static uint32_t data_revision_seen;
 static uint32_t api_health_revision_seen = UINT32_MAX;
 static int gmt_minute_seen = -1;
 static lv_point_t touch_down_point;
@@ -432,6 +447,7 @@ typedef enum {
     GENERATED_SCENE_NONE = 0,
     GENERATED_SCENE_SOLAR,
     GENERATED_SCENE_ISS,
+    GENERATED_SCENE_ECLIPSE,
     GENERATED_SCENE_MOON,
     GENERATED_SCENE_LAUNCH_MAIN,
     GENERATED_SCENE_LAUNCH_MAP,
@@ -624,7 +640,7 @@ typedef struct {
 } radar_aircraft_view_t;
 
 static radar_aircraft_view_t radar_aircraft_views[APP_MAX_AIRCRAFT];
-static int radar_aircraft_status_unix_seen = -1;
+static uint32_t radar_aircraft_revision_seen;
 static int radar_aircraft_sprite_cursor;
 static uint8_t *radar_aircraft_sprite_pool;
 static lv_obj_t *radar_aircraft_layer;
@@ -2387,7 +2403,7 @@ static void draw_shell_on(lv_obj_t *screen)
     radar_menu_overlay = NULL;
     radar_aircraft_layer = NULL;
     memset(radar_aircraft_views, 0, sizeof(radar_aircraft_views));
-    radar_aircraft_status_unix_seen = -1;
+    radar_aircraft_revision_seen = UINT32_MAX;
     radar_aircraft_sprite_cursor = 0;
     memset(pushed_map_tile_objects, 0, sizeof(pushed_map_tile_objects));
     weather_temperature_label = NULL;
@@ -4761,10 +4777,9 @@ static void radar_update_aircraft_animation(void)
     const double origin_lat = atof(cfg.location_lat);
     const double origin_lon = atof(cfg.location_lon);
 
-    if (data->fetched_unix !=
-        radar_aircraft_status_unix_seen) {
-        radar_aircraft_status_unix_seen =
-            data->fetched_unix;
+    const uint32_t generation = data->revision ? data->revision : (uint32_t)data->fetched_unix;
+    if (generation != radar_aircraft_revision_seen) {
+        radar_aircraft_revision_seen = generation;
         radar_sync_aircraft_views(
             data,
             origin_lat,
@@ -5501,6 +5516,17 @@ static void draw_api_status_mark(app_api_health_state_t health,
         return;
     }
 
+    if (health == APP_API_HEALTH_OFFLINE || health == APP_API_HEALTH_LIMITED ||
+        health == APP_API_HEALTH_UNAVAILABLE) {
+        lv_obj_t *text = label(radar_menu_overlay,
+            health == APP_API_HEALTH_OFFLINE ? "Offline" :
+            health == APP_API_HEALTH_LIMITED ? "Limited" : "No reply",
+            &lv_font_montserrat_12, lv_color_hex(0xffb64a), LV_ALIGN_TOP_LEFT,
+            center_x - 36, center_y - 8);
+        lv_obj_set_width(text, 72);
+        lv_obj_set_style_text_align(text, LV_TEXT_ALIGN_CENTER, 0);
+        return;
+    }
     const bool available = health == APP_API_HEALTH_VALID;
     lv_obj_t *halo = card(
         radar_menu_overlay,
@@ -5764,6 +5790,7 @@ static void render_radar(void)
         &radar_map_index
     );
     const uint8_t radar_map_kind = (uint8_t)(MAP_KIND_RADAR_BASE + radar_map_index);
+    const bool source_loaded = radar_map != NULL && radar_map_len == APP_REMOTE_MAP_BYTES;
     radar_map = prepare_padded_map_tiles(radar_map_kind, radar_map_len, radar_map, radar_map_revision);
 
     draw_shell();
@@ -5773,6 +5800,7 @@ static void render_radar(void)
     } else {
         soft_blob(screen_root, 232, 224, 230, lv_color_hex(0x1a1a1a), (lv_opa_t)18);
     }
+    atomic_store(&radar_background_result, radar_map != NULL ? 3U : source_loaded ? 2U : 1U);
 
     ring(screen_root, 454, lv_color_hex(0x1c241d), 1, (lv_opa_t)70);
     ring(screen_root, 340, lv_color_hex(0x243025), 1, (lv_opa_t)86);
@@ -8791,6 +8819,9 @@ static void render_tracked_no_scheduled_flight(void)
 static bool tracked_should_show_countdown(
     const app_remote_status_t *remote)
 {
+    if (remote && !strcasecmp(remote->tracked_flight_status, "Cancelled")) return true;
+    if (remote && (!strcasecmp(remote->tracked_flight_status, "Diverted") ||
+                   !strcasecmp(remote->tracked_flight_status, "Landed after diversion"))) return true;
     if (remote == NULL || !tracked_is_preflight(remote) ||
         remote->tracked_flight_estimated_departure_unix <= 0) {
         return false;
@@ -8798,7 +8829,7 @@ static bool tracked_should_show_countdown(
     const int64_t seconds =
         remote->tracked_flight_estimated_departure_unix -
         (int64_t)time(NULL);
-    return seconds > 3600;
+    return seconds > 3600 || seconds <= 0;
 }
 
 static void tracked_draw_scheduled_countdown(
@@ -8856,6 +8887,26 @@ static void tracked_draw_scheduled_countdown(
         remote->tracked_flight_destination_city,
         313);
 
+    if (!strcasecmp(remote->tracked_flight_status, "Cancelled")) {
+        tracked_centered_label(screen_root, "FLIGHT CANCELLED", &lv_font_montserrat_24,
+                               lv_color_hex(0xff686e), 33, 235, 400);
+        return;
+    }
+    const bool diverted_landed = !strcasecmp(remote->tracked_flight_status, "Landed after diversion");
+    if (diverted_landed || !strcasecmp(remote->tracked_flight_status, "Diverted")) {
+        tracked_centered_label(screen_root, diverted_landed ? "LANDED AFTER DIVERSION" : "FLIGHT DIVERTED",
+                               &lv_font_montserrat_20, lv_color_hex(0xffb000), 33, 231, 400);
+        tracked_centered_label(screen_root, "Original route shown", &lv_font_montserrat_14,
+                               lv_color_hex(0xadb8af), 33, 268, 400);
+        return;
+    }
+    if (remote->tracked_flight_estimated_departure_unix <= now) {
+        tracked_centered_label(screen_root, "AWAITING DEPARTURE", &lv_font_montserrat_20,
+                               lv_color_hex(0xffb000), 33, 231, 400);
+        tracked_draw_static_gate_sign(screen_root, CX, 310, true,
+            remote->tracked_flight_origin_terminal, remote->tracked_flight_origin_gate);
+        return;
+    }
     tracked_preflight_gate_sign = tracked_draw_static_gate_sign(
         screen_root,
         CX,
@@ -9384,6 +9435,7 @@ static void draw_weather_city_icon(const char *location_key,
     } else {
         icon = airspace_city_icon_for_key(location_key);
     }
+    atomic_store(&weather_emblem_width, icon ? (uint32_t)icon->header.w : 0U);
     if (icon == NULL) {
         return;
     }
@@ -9395,10 +9447,15 @@ static void draw_weather_city_icon(const char *location_key,
     lv_image_set_scale(image, scale);
     const int scaled_width = (int)icon->header.w * scale / 256;
     const int scaled_height = (int)icon->header.h * scale / 256;
+    /* LVGL scales around the pivot inside the unscaled image object.
+     * Preserve the 128px Weather artwork's existing on-screen center when
+     * substituting a smaller compiled Settings icon. Do not move the original. */
+    const int pivot_adjust_x = (APP_REMOTE_WEATHER_CITY_ICON_SIZE - (int)icon->header.w) / 2;
+    const int pivot_adjust_y = (APP_REMOTE_WEATHER_CITY_ICON_SIZE - (int)icon->header.h) / 2;
     lv_obj_set_pos(
         image,
-        center_x - scaled_width / 2,
-        center_y - scaled_height / 2);
+        center_x - scaled_width / 2 + pivot_adjust_x,
+        center_y - scaled_height / 2 + pivot_adjust_y);
     lv_obj_set_style_image_opa(image, LV_OPA_COVER, 0);
     lv_obj_remove_flag(image, LV_OBJ_FLAG_CLICKABLE);
 }
@@ -10240,7 +10297,7 @@ static void render_weather(void)
             snprintf(
                 frame_time,
                 sizeof(frame_time),
-                "+%d MIN",
+                "NOWCAST +%d MIN",
                 minutes_after_now);
         }
         weather_radar_time_label = label(
@@ -11587,7 +11644,14 @@ static void render_solar_system(void)
 #define ISS_MAP_BOTTOM 352
 #define ISS_MARKER_SIZE 64
 #define ISS_SOLAR_OVERLAY_PIXELS \
-    ((size_t)SCREEN_SIZE * (size_t)SCREEN_SIZE)
+    ((size_t)SCREEN_SIZE * (ISS_MAP_BOTTOM - ISS_MAP_TOP + 1))
+
+/* A8 masks only cover the map latitude band. Drawing and damage rectangles
+ * remain in original screen coordinates; only the backing store is cropped. */
+static inline size_t space_mask_pixel(int x, int y)
+{
+    return (size_t)(y - ISS_MAP_TOP) * SCREEN_SIZE + (size_t)x;
+}
 
 static float natural_earth_x_factor(float latitude_rad)
 {
@@ -11809,10 +11873,7 @@ static void render_space_solar_overlay_mask(
         sinf(declination_rad);
     const float declination_cosine =
         cosf(declination_rad);
-    for (int y = 0; y < SCREEN_SIZE; y++) {
-        if (y < ISS_MAP_TOP || y > ISS_MAP_BOTTOM) {
-            continue;
-        }
+    for (int y = ISS_MAP_TOP; y <= ISS_MAP_BOTTOM; y++) {
         float latitude_rad;
         if (!natural_earth_latitude_for_y(
                 y,
@@ -11888,10 +11949,7 @@ static void render_space_solar_overlay_mask(
                 terminator * terminator *
                 (3.0f - 2.0f * terminator);
 
-            const size_t pixel =
-                (size_t)y *
-                    (size_t)SCREEN_SIZE +
-                (size_t)x;
+            const size_t pixel = space_mask_pixel(x, y);
             buffer[pixel] = terminator_only
                 ? (uint8_t)lroundf(118.0f * terminator)
                 : (uint8_t)lroundf(148.0f * night);
@@ -11918,7 +11976,7 @@ static void prepare_space_solar_overlay_descriptor(
     descriptor->header.magic = LV_IMAGE_HEADER_MAGIC;
     descriptor->header.cf = LV_COLOR_FORMAT_A8;
     descriptor->header.w = SCREEN_SIZE;
-    descriptor->header.h = SCREEN_SIZE;
+    descriptor->header.h = ISS_MAP_BOTTOM - ISS_MAP_TOP + 1;
     descriptor->header.stride = SCREEN_SIZE;
     descriptor->data_size = ISS_SOLAR_OVERLAY_PIXELS;
     descriptor->data = buffer;
@@ -11932,7 +11990,7 @@ static lv_obj_t *create_space_solar_overlay(
 {
     lv_obj_t *image = lv_image_create(map);
     lv_image_set_src(image, descriptor);
-    lv_obj_set_pos(image, 0, 0);
+    lv_obj_set_pos(image, 0, ISS_MAP_TOP);
     lv_obj_set_style_image_recolor(
         image,
         lv_color_hex(color),
@@ -12084,12 +12142,11 @@ static void update_eclipse_day_night_mask(
 
     lv_area_t dirty[ECLIPSE_SHADE_DIRTY_ROWS][2];
     bool dirty_valid[ECLIPSE_SHADE_DIRTY_ROWS][2] = {{false}};
-    for (int y = 0; y < SCREEN_SIZE; y++) {
+    for (int y = ISS_MAP_TOP; y <= ISS_MAP_BOTTOM; y++) {
         const int row =
             y * ECLIPSE_SHADE_DIRTY_ROWS / SCREEN_SIZE;
         for (int x = 0; x < SCREEN_SIZE; x++) {
-            const size_t pixel =
-                (size_t)y * (size_t)SCREEN_SIZE + (size_t)x;
+            const size_t pixel = space_mask_pixel(x, y);
             const uint8_t next =
                 space_iss_terminator_buffer[pixel];
             if (space_iss_night_buffer[pixel] == next) {
@@ -12885,9 +12942,7 @@ static void rasterize_eclipse_terminator_segment(
                 (3.0f - 2.0f * coverage);
             const uint8_t alpha = (uint8_t)lroundf(
                 178.0f * envelope * coverage);
-            const size_t pixel =
-                (size_t)y * (size_t)SCREEN_SIZE +
-                (size_t)x;
+            const size_t pixel = space_mask_pixel(x, y);
             if (alpha > space_eclipse_motion_buffer[pixel]) {
                 space_eclipse_motion_buffer[pixel] = alpha;
             }
@@ -14098,6 +14153,7 @@ static void render_space_map_overlay(lv_obj_t *map)
                 CX,
                 399,
                 LV_SCALE_NONE);
+            atomic_store(&iss_flag_result, flags ? 3U : 2U);
             if (flags != NULL &&
                 space_iss_flags_fade_started_us > 0) {
                 const uint32_t fade_duration_ms = 720;
@@ -14133,6 +14189,7 @@ static void render_space_map_overlay(lv_obj_t *map)
             }
         } else {
             space_iss_flags_fade_started_us = 0;
+            atomic_store(&iss_flag_result, 1U);
         }
         const int metric_top = cfg.iss_flags_enabled ? 340 : 352;
         draw_iss_metric(
@@ -16330,115 +16387,10 @@ static void render_launch(void)
     }
 }
 
-static int clock_weekday(int year, int month, int day)
+static int clock_utc_offset_seconds(const char *key, time_t now)
 {
-    static const int offsets[] = {0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4};
-    if (month < 3) {
-        year--;
-    }
-    return (
-        year +
-        year / 4 -
-        year / 100 +
-        year / 400 +
-        offsets[month - 1] +
-        day
-    ) % 7;
-}
-
-static int clock_days_in_month(int year, int month)
-{
-    static const int days[] = {
-        31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31
-    };
-    if (month == 2 &&
-        ((year % 4 == 0 && year % 100 != 0) || year % 400 == 0)) {
-        return 29;
-    }
-    return days[month - 1];
-}
-
-static int clock_nth_sunday(int year, int month, int nth)
-{
-    const int first_weekday = clock_weekday(year, month, 1);
-    return 1 + ((7 - first_weekday) % 7) + (nth - 1) * 7;
-}
-
-static int clock_last_sunday(int year, int month)
-{
-    const int last_day = clock_days_in_month(year, month);
-    return last_day - clock_weekday(year, month, last_day);
-}
-
-static bool clock_us_daylight_time(time_t now, int standard_offset_hours)
-{
-    time_t local_standard = now + standard_offset_hours * 3600;
-    struct tm value = {0};
-    gmtime_r(&local_standard, &value);
-    const int year = value.tm_year + 1900;
-    const int month = value.tm_mon + 1;
-    if (month < 3 || month > 11) {
-        return false;
-    }
-    if (month > 3 && month < 11) {
-        return true;
-    }
-    if (month == 3) {
-        const int start = clock_nth_sunday(year, 3, 2);
-        return value.tm_mday > start ||
-               (value.tm_mday == start && value.tm_hour >= 2);
-    }
-    const int end = clock_nth_sunday(year, 11, 1);
-    return value.tm_mday < end ||
-           (value.tm_mday == end && value.tm_hour < 1);
-}
-
-static bool clock_europe_daylight_time(time_t now)
-{
-    struct tm utc = {0};
-    gmtime_r(&now, &utc);
-    const int year = utc.tm_year + 1900;
-    const int month = utc.tm_mon + 1;
-    if (month < 3 || month > 10) {
-        return false;
-    }
-    if (month > 3 && month < 10) {
-        return true;
-    }
-    if (month == 3) {
-        const int start = clock_last_sunday(year, 3);
-        return utc.tm_mday > start ||
-               (utc.tm_mday == start && utc.tm_hour >= 1);
-    }
-    const int end = clock_last_sunday(year, 10);
-    return utc.tm_mday < end ||
-           (utc.tm_mday == end && utc.tm_hour < 1);
-}
-
-static int clock_utc_offset_hours(const char *key, time_t now)
-{
-    if (key == NULL) {
-        return 0;
-    }
-    if (strcasecmp(key, "SJC") == 0 ||
-        strcasecmp(key, "SFO") == 0 ||
-        strcasecmp(key, "SAN") == 0) {
-        return -8 + (clock_us_daylight_time(now, -8) ? 1 : 0);
-    }
-    if (strcasecmp(key, "JFK") == 0) {
-        return -5 + (clock_us_daylight_time(now, -5) ? 1 : 0);
-    }
-    if (strcasecmp(key, "DUS") == 0) {
-        return 1 + (clock_europe_daylight_time(now) ? 1 : 0);
-    }
-    if (strcasecmp(key, "MOW") == 0 ||
-        strcasecmp(key, "LED") == 0) {
-        return 3;
-    }
-    if (strcasecmp(key, "ICN") == 0) {
-        return 9;
-    }
-    return 0;
+    const app_location_preset_t *preset = app_location_preset_find(key);
+    return preset_utc_offset(preset ? preset->timezone : NULL, now);
 }
 
 static void clock_time_for_key(const char *key,
@@ -16446,7 +16398,7 @@ static void clock_time_for_key(const char *key,
                                struct tm *value,
                                char output[8])
 {
-    time_t local = now + clock_utc_offset_hours(key, now) * 3600;
+    time_t local = now + clock_utc_offset_seconds(key, now);
     gmtime_r(&local, value);
     strftime(output, 8, "%H:%M", value);
 }
@@ -16757,10 +16709,10 @@ static bool clock_sunrise_sunset(
 
     const double latitude = strtod(location->lat, NULL);
     const double longitude = strtod(location->lon, NULL);
-    const int offset = clock_utc_offset_hours(
+    const int offset = clock_utc_offset_seconds(
         location->key,
         now);
-    time_t local_epoch = now + offset * 3600;
+    time_t local_epoch = now + offset;
     struct tm local = {0};
     gmtime_r(&local_epoch, &local);
     const double day = local.tm_yday + 1;
@@ -16835,7 +16787,7 @@ static bool clock_sunrise_sunset(
                 longitude_hour);
         results[event] =
             clock_normalize_hours(
-                utc + offset);
+                utc + offset / 3600.0);
     }
 
     *sunrise = (float)results[0];
@@ -21121,6 +21073,9 @@ static generated_scene_t current_generated_scene(void)
         return GENERATED_SCENE_GMT;
     }
     if (current_screen == SCREEN_SPACE) {
+        if (space_eclipse_visible) {
+            return GENERATED_SCENE_ECLIPSE;
+        }
         if (space_iss_visible) {
             return GENERATED_SCENE_ISS;
         }
@@ -21188,7 +21143,13 @@ static void release_inactive_generated_artwork(
         gmt_transition_snapshot_secondary_key[0] = '\0';
         gmt_transition_snapshot_ready = false;
     }
-    if (target != GENERATED_SCENE_ISS) {
+    if (target != GENERATED_SCENE_ECLIPSE) {
+        released += release_generated_image(
+            &space_eclipse_motion_buffer,
+            &space_eclipse_motion_image,
+            ISS_SOLAR_OVERLAY_PIXELS);
+    }
+    if (target != GENERATED_SCENE_ISS && target != GENERATED_SCENE_ECLIPSE) {
         released += release_generated_image(
             &space_iss_night_buffer,
             &space_iss_night_image,
@@ -21385,6 +21346,18 @@ static void render_screen(void)
         render_radar();
         break;
     }
+    const char *page = "radar";
+    switch (current_screen) {
+    case SCREEN_TRACKED_FLIGHT: page = "tracker"; break;
+    case SCREEN_WEATHER: page = weather_radar_visible ? "weatherRadar" :
+        weather_forecast_visible ? "forecast" : "weather"; break;
+    case SCREEN_GMT: page = "clock"; break;
+    case SCREEN_SPACE: page = space_eclipse_visible ? "eclipse" : space_iss_visible ? "iss" :
+        space_moon_visible ? "moon" : "solar"; break;
+    case SCREEN_LAUNCH: page = "launch"; break;
+    default: break;
+    }
+    atomic_store(&last_rendered_page, page);
     render_requested = false;
 #ifndef AIRSPACE_DESKTOP_RENDERER
     if (splash_cleanup_pending) {
@@ -21521,6 +21494,7 @@ static void handle_health_log(void)
         : 0;
     const UBaseType_t lvgl_stack_low_watermark =
         uxTaskGetStackHighWaterMark(NULL);
+    atomic_store(&ui_stack_low_bytes, (uint32_t)lvgl_stack_low_watermark);
     ESP_LOGI(TAG,
              "health: int=%uKB largest=%uKB dma=%uKB psram=%uKB largest_psram=%uKB lv_stack_low=%uB lv_used=%u%% lv_frag=%u%% lv_free=%uKB lv_biggest=%uKB sweep_avg=%uus sweep_max=%uus plane_moves=%u",
              heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024,
@@ -22679,7 +22653,7 @@ static bool update_weather_radar_in_place(
         } else {
             lv_label_set_text_fmt(
                 weather_radar_time_label,
-                "+%d MIN",
+                "NOWCAST +%d MIN",
                 frame_index *
                     APP_WEATHER_RADAR_FORECAST_STEP_MINUTES);
         }
@@ -22905,13 +22879,13 @@ static void handle_data_refresh(void)
             refresh_radar_menu_overlay();
         }
     }
-    if (data == NULL ||
-        data->fetched_unix <= 0 ||
-        data->fetched_unix == data_fetched_unix_seen) {
+    if (!data) return;
+    const uint32_t generation = data->revision ? data->revision : (uint32_t)data->fetched_unix;
+    if (!generation || generation == data_revision_seen) {
         return;
     }
 
-    data_fetched_unix_seen = data->fetched_unix;
+    data_revision_seen = generation;
     if (aircraft_detail_active && selected_aircraft.icao24[0] != '\0') {
         for (int i = 0;
              i < data->aircraft_count && i < APP_MAX_AIRCRAFT;
@@ -23280,6 +23254,7 @@ static void handle_power_and_dock_timers(void)
 static void app_timer_cb(lv_timer_t *timer)
 {
     (void)timer;
+    atomic_fetch_add_explicit(&ui_heartbeat, 1, memory_order_relaxed);
     handle_input();
     if (display_sleeping) {
         return;
@@ -23443,6 +23418,7 @@ void app_main(void)
 
 static lv_display_t *desktop_display;
 static uint8_t *desktop_framebuffer;
+static uint32_t desktop_frame_generation;
 static char desktop_renderer_error[160];
 
 static uint32_t desktop_tick_ms(void)
@@ -23457,6 +23433,7 @@ static void desktop_flush(
 {
     (void)area;
     (void)pixels;
+    ++desktop_frame_generation;
     lv_display_flush_ready(display);
 }
 
@@ -23714,6 +23691,11 @@ void airspace_renderer_render(void)
 const uint16_t *airspace_renderer_pixels(void)
 {
     return (const uint16_t *)desktop_framebuffer;
+}
+
+uint32_t airspace_renderer_frame_generation(void)
+{
+    return desktop_frame_generation;
 }
 
 int airspace_renderer_width(void)

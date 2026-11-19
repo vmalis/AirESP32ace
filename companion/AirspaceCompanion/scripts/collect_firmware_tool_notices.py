@@ -29,5 +29,5 @@ source = scripts.parent / ".build/firmware-tool/sources/esptool-4.12.0.tar.gz"
 if not source.is_file():
     raise SystemExit("Missing matching esptool source archive; download it before packaging.")
 shutil.copyfile(source, destination / source.name)
-for name in ("firmware_tool.py", "build_firmware_tool.sh", "firmware_tool_requirements.txt"):
+for name in ("firmware_tool.py", "firmware_tool.spec", "build_firmware_tool.sh", "firmware_tool_requirements.txt"):
     shutil.copyfile(scripts / name, destination / name)

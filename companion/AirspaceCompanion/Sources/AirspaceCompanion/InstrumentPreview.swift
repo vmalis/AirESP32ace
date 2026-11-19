@@ -1058,6 +1058,9 @@ private struct RadarAPIsTwin: View {
                             .stroke(Color.red.opacity(0.55), lineWidth: 1)
                         Image(systemName: "xmark.circle.fill")
                             .foregroundStyle(.red)
+                    case .unavailable:
+                        Image(systemName: "exclamationmark.circle")
+                            .foregroundStyle(.orange)
                     }
                 }
                 .frame(width: 36, height: 36)
@@ -1173,20 +1176,28 @@ private struct ScheduledFlightCountdownTwin: View {
                     Text("> ").foregroundStyle(.secondary)
                     endpoint(flight.destination)
                 }
-                Text(flight.isDepartureDelayed ? "DELAYED - DEPARTS IN" : "DEPARTS IN")
-                    .font(.system(size: 12))
-                    .foregroundStyle(flight.isDepartureDelayed ? .yellow : .secondary)
-                if minutes >= 1440 {
-                    Text("\(minutes / 1440)").font(.system(size: 48)).foregroundStyle(accent)
-                    Text("DAYS").font(.system(size: 14)).foregroundStyle(.secondary)
+                if let notice = flight.trackerNotice(at: context.date) {
+                    Text(notice.uppercased()).font(.system(size: 20)).foregroundStyle(.yellow)
+                } else {
+                    countdown(minutes)
                 }
-                Text(String(format: "%02d:%02d", (minutes % 1440) / 60, minutes % 60))
-                    .font(.system(size: minutes >= 1440 ? 24 : 48)).foregroundStyle(accent)
-                Text("HOURS : MINUTES").font(.system(size: 12)).foregroundStyle(.secondary)
             }
             .foregroundStyle(.white)
             .frame(width: 466, height: 466)
         }
+    }
+
+    @ViewBuilder private func countdown(_ minutes: Int) -> some View {
+        Text(flight.isDepartureDelayed ? "DELAYED - DEPARTS IN" : "DEPARTS IN")
+            .font(.system(size: 12))
+            .foregroundStyle(flight.isDepartureDelayed ? .yellow : .secondary)
+        if minutes >= 1440 {
+            Text("\(minutes / 1440)").font(.system(size: 48)).foregroundStyle(accent)
+            Text("DAYS").font(.system(size: 14)).foregroundStyle(.secondary)
+        }
+        Text(String(format: "%02d:%02d", (minutes % 1440) / 60, minutes % 60))
+            .font(.system(size: minutes >= 1440 ? 24 : 48)).foregroundStyle(accent)
+        Text("HOURS : MINUTES").font(.system(size: 12)).foregroundStyle(.secondary)
     }
 
     private func endpoint(_ airport: Airport) -> some View {

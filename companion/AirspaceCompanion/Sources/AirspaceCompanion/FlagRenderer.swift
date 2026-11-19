@@ -7,6 +7,13 @@ import Foundation
 enum FlagRenderer {
     static let pixelSize = 40
 
+    static func trackedEndpoint(_ airport: Airport) throws -> Data {
+        guard let country = AirportCityCatalog.flagCountry(for: airport) else {
+            throw TrackedPackageProof.fail("The country of an endpoint airport could not be verified. Refresh the flight before syncing its flags.")
+        }
+        return try rgb565Flag(countryCode: country)
+    }
+
     static func rgb565Flag(countryCode: String?) throws -> Data {
         let code = normalizedCountryCode(countryCode)
         let size = NSSize(width: pixelSize, height: pixelSize)

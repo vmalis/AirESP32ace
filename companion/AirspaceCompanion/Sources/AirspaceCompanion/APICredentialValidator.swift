@@ -7,6 +7,7 @@ enum APICredentialState: Equatable, Sendable {
     case checking
     case valid
     case invalid(String)
+    case unavailable(String)
 
     var isValid: Bool {
         if case .valid = self { return true }
@@ -15,6 +16,7 @@ enum APICredentialState: Equatable, Sendable {
 
     var detail: String? {
         if case .invalid(let detail) = self { return detail }
+        if case .unavailable(let detail) = self { return detail }
         return nil
     }
 }
@@ -30,6 +32,14 @@ struct APICredentialValidator: Sendable {
 
     init(session: URLSession = .shared) {
         self.session = session
+    }
+
+    private static func failure(_ code: Int) -> APICredentialState {
+        switch code {
+        case 401, 403: .invalid("Authorization rejected (HTTP \(code))")
+        case 429: .unavailable("Provider rate limit reached; key not reverified")
+        default: .unavailable("Provider unavailable (HTTP \(code)); key not reverified")
+        }
     }
 
     func validateFlightAware(apiKey: String) async -> APICredentialState {
@@ -48,18 +58,20 @@ struct APICredentialValidator: Sendable {
         request.setValue(key, forHTTPHeaderField: "x-apikey")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         do {
-            let (_, response) = try await session.data(for: request)
+            let (data, response) = try await session.data(for: request)
             guard let http = response as? HTTPURLResponse else {
-                return .invalid("FlightAware returned an invalid response")
+                return .unavailable("FlightAware returned an invalid response")
             }
             guard (200..<300).contains(http.statusCode) else {
-                return .invalid(
-                    "Authorization rejected (HTTP \(http.statusCode))"
-                )
+                return Self.failure(http.statusCode)
+            }
+            guard http.statusCode == 200,
+                  (try? JSONSerialization.jsonObject(with: data)) is [String: Any] else {
+                return .unavailable("FlightAware returned an invalid response")
             }
             return .valid
         } catch {
-            return .invalid(Self.safeMessage(error))
+            return .unavailable(Self.safeMessage(error))
         }
     }
 
@@ -98,22 +110,25 @@ struct APICredentialValidator: Sendable {
         do {
             let (data, response) = try await session.data(for: request)
             guard let http = response as? HTTPURLResponse else {
-                return .invalid("OpenSky returned an invalid response")
+                return .unavailable("OpenSky returned an invalid response")
             }
             guard (200..<300).contains(http.statusCode) else {
-                return .invalid(
-                    "Authorization rejected (HTTP \(http.statusCode))"
-                )
+                if http.statusCode == 400,
+                   let failure = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+                   failure["error"] as? String == "invalid_client" {
+                    return .invalid("Client credentials rejected")
+                }
+                return Self.failure(http.statusCode)
             }
             let object = try JSONSerialization.jsonObject(with: data)
             guard let root = object as? [String: Any],
                   let token = root["access_token"] as? String,
                   !token.isEmpty else {
-                return .invalid("Authorization response contained no token")
+                return .unavailable("Authorization response contained no token")
             }
             return .valid
         } catch {
-            return .invalid(Self.safeMessage(error))
+            return .unavailable(Self.safeMessage(error))
         }
     }
 
@@ -122,38 +137,37 @@ struct APICredentialValidator: Sendable {
         guard !key.isEmpty else {
             return .invalid("API key not provided")
         }
-        var components = URLComponents(
-            string: "https://airlabs.co/api/v9/ping"
-        )
-        components?.queryItems = [
-            URLQueryItem(name: "api_key", value: key),
-        ]
-        guard let url = components?.url else {
+        guard let url = URL(string: "https://airlabs.co/api/v9/ping") else {
             return .invalid("Could not build authorization request")
         }
 
         var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        request.httpBody = "api_key=\(Self.formEncode(key))".data(using: .utf8)
         request.timeoutInterval = 15
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         do {
             let (data, response) = try await session.data(for: request)
             guard let http = response as? HTTPURLResponse else {
-                return .invalid("AirLabs returned an invalid response")
+                return .unavailable("AirLabs returned an invalid response")
             }
             guard (200..<300).contains(http.statusCode) else {
-                return .invalid("Authorization rejected (HTTP \(http.statusCode))")
+                return Self.failure(http.statusCode)
             }
-            if let root = try JSONSerialization.jsonObject(with: data)
-                as? [String: Any],
-               let error = root["error"],
+            guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                return .unavailable("AirLabs returned an invalid response")
+            }
+            if let error = root["error"],
                !(error is NSNull) {
-                let message = (error as? [String: Any])?["message"]
-                    as? String ?? "Authorization rejected"
-                return .invalid(message)
+                let code = (error as? [String: Any])?["code"] as? String ?? ""
+                if code == "unknown_api_key" || code == "expired_api_key" { return Self.failure(401) }
+                if code.hasSuffix("_limit_exceeded") { return Self.failure(429) }
+                return .unavailable("AirLabs could not verify the key")
             }
             return .valid
         } catch {
-            return .invalid(Self.safeMessage(error))
+            return .unavailable(Self.safeMessage(error))
         }
     }
 

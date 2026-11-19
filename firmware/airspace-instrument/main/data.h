@@ -3,6 +3,7 @@
 
 #pragma once
 struct cJSON;
+#define APP_OPENSKY_DEFERRED (-2) /* no request to provider; do not use paid fallback */
 
 /* Called only from the data worker; shares Radar's token and rate limiter. */
 struct cJSON *app_data_tracker_opensky(const char *query, int *code);
@@ -10,6 +11,11 @@ struct cJSON *app_data_tracker_opensky(const char *query, int *code);
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+
+/* Shared, bounded transport. The caller owns the parsed tree. retry_after is
+ * only overwritten when a valid numeric Retry-After <= 1 day is received. */
+struct cJSON *app_data_request_provider_json(const char *url, const char *form,
+    const char *flightaware_key, size_t max_len, int *code, int *retry_after);
 
 #define APP_MAX_AIRCRAFT 16
 #define APP_WEATHER_FORECAST_DAYS 5
@@ -35,6 +41,9 @@ typedef enum {
     APP_API_HEALTH_PENDING = 0,
     APP_API_HEALTH_VALID,
     APP_API_HEALTH_INVALID,
+    APP_API_HEALTH_OFFLINE,
+    APP_API_HEALTH_LIMITED,
+    APP_API_HEALTH_UNAVAILABLE,
 } app_api_health_state_t;
 
 typedef enum {
@@ -102,6 +111,11 @@ typedef struct {
     int aircraft_http_status;
     float aircraft_radius_miles;
     int fetched_unix;
+    uint32_t revision; /* UI publication generation, independent of observation time. */
+    int aircraft_fetched_unix;
+    int weather_fetched_unix;
+    int metar_observed_unix;
+    int last_attempt_unix;
     char weather_location_key[8];
     int weather_temperature;
     int weather_apparent_temperature;

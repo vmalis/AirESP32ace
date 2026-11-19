@@ -3070,7 +3070,9 @@ private struct DevicePreviewColumn: View {
     }
 
     private var previewTitle: String {
-        if selectedPage.isTrackedFlight && countdownOnly { return "Departure Countdown" }
+        if selectedPage.isTrackedFlight && countdownOnly {
+            return model.trackedFlight.trackerNotice(at: previewNow) ?? "Departure Countdown"
+        }
         if section == .launches {
             return "\(selectedLaunch.agency.displayName) · \(selectedPage.title)"
         }
@@ -3434,6 +3436,9 @@ private struct APIHealthIndicator: View {
             case .invalid:
                 Image(systemName: "xmark.circle.fill")
                     .foregroundStyle(Color.red)
+            case .unavailable:
+                Image(systemName: "exclamationmark.circle")
+                    .foregroundStyle(Color.orange)
             }
         }
         .frame(width: 18, height: 18)
@@ -3447,7 +3452,7 @@ private struct APIHealthIndicator: View {
             "Checking authorization…"
         case .valid:
             "Authorized"
-        case .invalid(let detail):
+        case .invalid(let detail), .unavailable(let detail):
             detail
         }
     }

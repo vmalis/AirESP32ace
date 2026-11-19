@@ -2,9 +2,8 @@
 // Created by VM, August 2026
 #include "launches.h"
 #include "app_config.h"
-#include "esp_crt_bundle.h"
+#include "data.h"
 #include "esp_heap_caps.h"
-#include "esp_http_client.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
@@ -73,7 +72,7 @@ static void publish(uint8_t enabled, int64_t now)
         if (!(enabled & (1U << a)) || app_launch_expired(e, now)) presentation[a].valid = false;
         if (presentation[a].valid) {
             mask |= 1U << a;
-            if (app_launch_stale(e, now)) {
+            if (app_launch_stale_for_mask(e, now, enabled)) {
                 snprintf(presentation[a].status, sizeof(presentation[a].status), "STALE - awaiting update");
                 snprintf(presentation[a].status_abbrev, sizeof(presentation[a].status_abbrev), "STALE");
                 snprintf(presentation[a].precision, sizeof(presentation[a].precision), "Unknown");
@@ -120,45 +119,10 @@ void app_launches_request_refresh(void)
     refresh_requested = true;
     xSemaphoreGive(mutex);
 }
-static esp_err_t http_event(esp_http_client_event_t *event)
-{
-    if (event->event_id == HTTP_EVENT_ON_HEADER && event->header_key && event->header_value &&
-        !strcasecmp(event->header_key, "Retry-After")) {
-        char *end;
-        long seconds = strtol(event->header_value, &end, 10);
-        if (*end == 0 && seconds > 0 && seconds <= 86400) *(int *)event->user_data = seconds;
-    }
-    return ESP_OK;
-}
 static cJSON *request(const char *url, int *code, int *retry)
 {
-    *code = 0; *retry = 3600;
-    esp_http_client_config_t config = {.url = url, .timeout_ms = 8000,
-        .crt_bundle_attach = esp_crt_bundle_attach, .disable_auto_redirect = true,
-        .buffer_size = 2048, .buffer_size_tx = 1024, .event_handler = http_event, .user_data = retry};
-    esp_http_client_handle_t client = esp_http_client_init(&config);
-    if (!client) return NULL;
-    esp_http_client_set_header(client, "Accept", "application/json");
-    esp_http_client_set_header(client, "User-Agent", "AirESP32ace/0.1.2 personal-display");
-    char *body = heap_caps_malloc(BODY_LIMIT + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    cJSON *root = NULL;
-    int used = 0, n = 0;
-    bool complete = false;
-    if (body && esp_http_client_open(client, 0) == ESP_OK) {
-        esp_http_client_fetch_headers(client);
-        *code = esp_http_client_get_status_code(client);
-        if (*code == 200) {
-            while (used < BODY_LIMIT && (n = esp_http_client_read(client, body + used, BODY_LIMIT - used)) > 0) used += n;
-            body[used] = 0;
-            complete = n >= 0 && esp_http_client_is_complete_data_received(client);
-        }
-    }
-    esp_http_client_close(client); esp_http_client_cleanup(client);
-    /* Release TLS allocations before constructing the JSON tree. */
-    if (complete) root = cJSON_Parse(body);
-    if (!root) ESP_LOGW("airspace_launch", "Response rejected: HTTP=%d bytes=%d complete=%d", *code, used, complete);
-    heap_caps_free(body);
-    return root;
+    *retry = 3600;
+    return app_data_request_provider_json(url, NULL, NULL, BODY_LIMIT, code, retry);
 }
 void app_launches_tick(bool online)
 {
@@ -254,7 +218,7 @@ cJSON *app_launches_json(void)
         const app_remote_launch_t *l = &e->launch;
         cJSON *j = cJSON_CreateObject(); cJSON_AddItemToArray(items, j);
         cJSON_AddBoolToObject(j, "available", l->valid && !app_launch_expired(e, now));
-        cJSON_AddBoolToObject(j, "stale", app_launch_stale(e, now));
+        cJSON_AddBoolToObject(j, "stale", app_launch_stale_for_mask(e, now, cfg.launch_agency_mask));
         cJSON_AddNumberToObject(j, "checkedUnix", e->checked);
         cJSON_AddNumberToObject(j, "httpStatus", e->http_status);
         cJSON_AddNumberToObject(j, "nextCheckUnix", e->next_check);

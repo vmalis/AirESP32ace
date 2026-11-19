@@ -27,6 +27,7 @@
 #include "esp_heap_caps.h"
 #include "esp_http_client.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/idf_additions.h"
 #include "freertos/semphr.h"
@@ -37,6 +38,7 @@
 #include "cargo_logos.h"
 #include "locations.h"
 #include "network.h"
+#include "provider_policy.h"
 #include "route_direction.h"
 #include "sdkconfig.h"
 
@@ -47,7 +49,7 @@
 #define FETCH_PNG_MAX (384 * 1024)
 #define DATA_TASK_STACK_BYTES (32 * 1024)
 #define DATA_REFRESH_MS (5 * 60 * 1000)
-#define AIRCRAFT_REFRESH_MS (30 * 1000)
+#define AIRCRAFT_REFRESH_MS (90 * 1000)
 #define AIRCRAFT_FALLBACK_REFRESH_MS (3 * 60 * 1000)
 #define AIRCRAFT_ERROR_RETRY_MS (60 * 1000)
 #define AIRCRAFT_RATE_LIMIT_RETRY_MS (5 * 60 * 1000)
@@ -67,7 +69,7 @@
 #define AIRCRAFT_METADATA_CACHE_COUNT 24
 #define AIRPORT_CITY_CACHE_COUNT 32
 #define AIRCRAFT_METADATA_REFRESH_SECONDS (6 * 60 * 60)
-#define AIRCRAFT_METADATA_BACKGROUND_PER_CYCLE 4
+#define AIRCRAFT_METADATA_BACKGROUND_PER_CYCLE 1
 #define AIRCRAFT_ROUTE_MAX_MIN_EXCESS_NM 180.0f
 #define AIRCRAFT_ROUTE_MAX_RELATIVE_EXCESS 0.35f
 #define AIRCRAFT_ROUTE_ENDPOINT_MARGIN_NM 250.0f
@@ -99,7 +101,8 @@ static TaskHandle_t data_task_handle;
 static char opensky_access_token[2048];
 static int opensky_token_expires_unix;
 static int opensky_rate_limited_until_unix;
-static bool opensky_rate_limit_was_authenticated;
+static app_sky_budget_t sky_budget[2];
+static int64_t tracker_priority_until;
 static bool aircraft_last_fetch_used_fallback;
 static volatile float aircraft_radius_miles = AIRCRAFT_RADIUS_DEFAULT_MI;
 static volatile bool full_refresh_requested;
@@ -412,7 +415,9 @@ static void write_status(const app_data_status_t *next)
     const app_api_health_state_t airlabs_api_health =
         status.airlabs_api_health;
     const uint32_t api_health_revision = status.api_health_revision;
+    uint32_t new_revision = status.revision + 1;
     status = *next;
+    status.revision = new_revision;
     /* API health is published asynchronously while slower weather or
      * aircraft requests may still hold an older status snapshot. */
     status.flightaware_api_health = flightaware_api_health;
@@ -947,6 +952,20 @@ static void insert_aircraft_candidate(app_aircraft_t *candidates,
     }
 }
 
+static esp_err_t provider_header(esp_http_client_event_t *event)
+{
+    if (event->event_id == HTTP_EVENT_ON_HEADER && event->user_data &&
+        event->header_key && event->header_value &&
+        (!strcasecmp(event->header_key, "X-Rate-Limit-Retry-After-Seconds") ||
+         !strcasecmp(event->header_key, "Retry-After"))) {
+        char *tail = NULL;
+        long seconds = strtol(event->header_value, &tail, 10);
+        if (tail != event->header_value && *tail == '\0' && seconds > 0 && seconds <= 7*86400)
+            *(int *)event->user_data = (int)seconds;
+    }
+    return ESP_OK;
+}
+
 static char *http_request_with_timeout(const char *url,
                                        const char *method,
                                        const char *request_body,
@@ -955,18 +974,28 @@ static char *http_request_with_timeout(const char *url,
                                        size_t max_len,
                                        int *status_code,
                                        size_t *response_len,
-                                       int timeout_ms)
+                                       int timeout_ms,
+                                       const char *flightaware_key,
+                                       int *retry_after_out)
 {
-    char *body = (char *)heap_caps_calloc(1, max_len + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if (body == NULL) {
-        ESP_LOGW(TAG, "No PSRAM for HTTP response");
-        return NULL;
-    }
+    /* Most radar/aircraft replies are much smaller than their defensive
+     * 384/128 KiB caps. Never reserve both the cap and TLS at connection
+     * start; allocate measured length, or grow a bounded chunked reply. */
+    char *body = NULL;
+    if (status_code) *status_code = 0;
+    if (response_len) *response_len = 0;
+    if (flightaware_key && *flightaware_key &&
+        strncmp(url, "https://aeroapi.flightaware.com/", sizeof("https://aeroapi.flightaware.com/")-1)) return NULL;
+    const int64_t deadline = esp_timer_get_time() / 1000 + timeout_ms;
 
+    int retry_after = 0;
     esp_http_client_config_t config = {
         .url = url,
+        .event_handler = provider_header,
+        .user_data = &retry_after,
         .timeout_ms = timeout_ms,
         .crt_bundle_attach = esp_crt_bundle_attach,
+        .disable_auto_redirect = true,
         .buffer_size = 4096,
         .buffer_size_tx = 4096,
         .user_agent = CONFIG_AIRSPACE_HTTP_USER_AGENT,
@@ -986,10 +1015,18 @@ static char *http_request_with_timeout(const char *url,
     if (content_type != NULL) {
         esp_http_client_set_header(client, "Content-Type", content_type);
     }
-    char authorization[4096];
     if (bearer_token != NULL && bearer_token[0] != '\0') {
-        snprintf(authorization, sizeof(authorization), "Bearer %s", bearer_token);
-        esp_http_client_set_header(client, "Authorization", authorization);
+        size_t size = strlen(bearer_token) + sizeof("Bearer ");
+        char *authorization = heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        if (!authorization) { esp_http_client_cleanup(client); return NULL; }
+        snprintf(authorization, size, "Bearer %s", bearer_token);
+        esp_err_t set = esp_http_client_set_header(client, "Authorization", authorization);
+        heap_caps_free(authorization);
+        if (set != ESP_OK) { esp_http_client_cleanup(client); return NULL; }
+    }
+    if (flightaware_key && *flightaware_key &&
+        esp_http_client_set_header(client, "x-apikey", flightaware_key) != ESP_OK) {
+        esp_http_client_cleanup(client); return NULL;
     }
 
     if (method != NULL && strcmp(method, "POST") == 0) {
@@ -999,7 +1036,7 @@ static char *http_request_with_timeout(const char *url,
     const int request_body_len = request_body != NULL ? strlen(request_body) : 0;
     esp_err_t err = esp_http_client_open(client, request_body_len);
     if (err != ESP_OK) {
-        ESP_LOGW(TAG, "HTTP open failed for %s: %s", url, esp_err_to_name(err));
+        ESP_LOGW(TAG, "Provider connection failed: %s", esp_err_to_name(err));
         esp_http_client_cleanup(client);
         heap_caps_free(body);
         return NULL;
@@ -1007,8 +1044,8 @@ static char *http_request_with_timeout(const char *url,
 
     if (request_body_len > 0) {
         const int written = esp_http_client_write(client, request_body, request_body_len);
-        if (written < 0) {
-            ESP_LOGW(TAG, "HTTP write failed for %s", url);
+        if (written != request_body_len) {
+            ESP_LOGW(TAG, "Provider request write incomplete");
             esp_http_client_close(client);
             esp_http_client_cleanup(client);
             heap_caps_free(body);
@@ -1016,33 +1053,77 @@ static char *http_request_with_timeout(const char *url,
         }
     }
 
-    (void)esp_http_client_fetch_headers(client);
-
-    int total = 0;
-    while (total < (int)max_len) {
-        int read = esp_http_client_read(client, body + total, (int)max_len - total);
-        if (read <= 0) {
-            break;
-        }
-        total += read;
-    }
-    body[total] = '\0';
-
+    const int64_t left_ms = deadline - esp_timer_get_time() / 1000;
+    if (left_ms <= 0) goto finish;
+    esp_http_client_set_timeout_ms(client, (int)left_ms);
+    int64_t declared = esp_http_client_fetch_headers(client);
+    if (declared < 0) goto finish;
+    if (retry_after_out && retry_after > 0 && retry_after <= 86400) *retry_after_out = retry_after;
     if (status_code != NULL) {
         *status_code = esp_http_client_get_status_code(client);
+        if (*status_code == 429 && !strncmp(url, "https://opensky-network.org/api/", sizeof("https://opensky-network.org/api/")-1)) {
+            int cooldown = retry_after > 0 ? retry_after : AIRCRAFT_RATE_LIMIT_RETRY_MS / 1000;
+            opensky_rate_limited_until_unix = (int)time(NULL) + cooldown;
+        }
     }
-    if (response_len != NULL) {
-        *response_len = (size_t)total;
+    if (declared > (int64_t)max_len) goto finish;
+    size_t capacity = declared > 0 ? (size_t)declared : max_len < 4096 ? max_len : 4096;
+    body = heap_caps_malloc(capacity + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!body) goto finish;
+    size_t total = 0;
+    bool complete = false;
+    while (true) {
+        /* Header parsing can already have buffered the entire reply; the
+         * IDF 'complete' flag counts network bytes, not delivered bytes.
+         * Always drain through read() before deciding completion. */
+        int64_t remaining = deadline - esp_timer_get_time() / 1000;
+        if (remaining <= 0) break;
+        esp_http_client_set_timeout_ms(client, (int)remaining);
+        if (total == capacity) {
+            /* At the exact cap a chunked response may only lack the end
+             * marker. Consume at most one byte to distinguish truncation. */
+            if (capacity == max_len || declared > 0) {
+                char extra;
+                complete = esp_http_client_read(client, &extra, 1) == 0 &&
+                           esp_http_client_is_complete_data_received(client);
+                break;
+            }
+            size_t larger = capacity * 2 < max_len ? capacity * 2 : max_len;
+            char *grown = heap_caps_realloc(body, larger + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+            if (!grown) break;
+            body = grown;
+            capacity = larger;
+        }
+        size_t wanted = capacity - total;
+        int n = esp_http_client_read(client, body + total, wanted < 1024 ? wanted : 1024);
+        if (n <= 0) {
+            complete = n == 0 && esp_http_client_is_complete_data_received(client);
+            break;
+        }
+        total += (size_t)n;
     }
+    if (!complete || !total) { heap_caps_free(body); body = NULL; }
+    else {
+        body[total] = '\0';
+        if (response_len) *response_len = total;
+    }
+finish:
     esp_http_client_close(client);
     esp_http_client_cleanup(client);
-
-    if (total == 0) {
-        heap_caps_free(body);
-        return NULL;
-    }
-
     return body;
+}
+
+cJSON *app_data_request_provider_json(const char *url, const char *form,
+    const char *flightaware_key, size_t max_len, int *code, int *retry_after)
+{
+    int status_code = 0;
+    char *body = http_request_with_timeout(url, form ? "POST" : "GET", form,
+        form ? "application/x-www-form-urlencoded" : NULL, NULL, max_len,
+        &status_code, NULL, 8000, flightaware_key, retry_after);
+    if (code) *code = status_code;
+    cJSON *result = body && status_code >= 200 && status_code < 300 ? cJSON_Parse(body) : NULL;
+    heap_caps_free(body);
+    return result;
 }
 
 static char *http_request(const char *url,
@@ -1062,7 +1143,7 @@ static char *http_request(const char *url,
                                      max_len,
                                      status_code,
                                      response_len,
-                                     12000);
+                                     12000, NULL, NULL);
 }
 
 static char *http_get(const char *url, size_t max_len, int *status_code)
@@ -1080,7 +1161,7 @@ static char *http_get_fast(const char *url, size_t max_len, int *status_code)
                                      max_len,
                                      status_code,
                                      NULL,
-                                     3500);
+                                     3500, NULL, NULL);
 }
 
 static uint8_t *http_get_binary(const char *url, size_t max_len, int *status_code, size_t *response_len)
@@ -1110,6 +1191,12 @@ static char *http_post_form(const char *url, const char *form_body, size_t max_l
                         max_len,
                         status_code,
                         NULL);
+}
+
+static char *http_post_form_fast(const char *url, const char *form, size_t max_len, int *code)
+{
+    return http_request_with_timeout(url, "POST", form, "application/x-www-form-urlencoded",
+                                     NULL, max_len, code, NULL, 3500, NULL, NULL);
 }
 
 static bool normalize_airline_iata(const char *iata, char normalized[4])
@@ -1563,8 +1650,6 @@ static bool decode_airline_logo_file(const char *iata, const char *path)
     }
 
     app_data_status_t next = read_status();
-    const int now = (int)time(NULL);
-    next.fetched_unix = now > next.fetched_unix ? now : next.fetched_unix + 1;
     write_status(&next);
     return true;
 }
@@ -1860,11 +1945,11 @@ static airlabs_enrich_result_t fetch_airlabs_selected_aircraft(
         return AIRLABS_ENRICH_UNAVAILABLE;
     }
 
-    char url[768];
+    char form[768];
     snprintf(
-        url,
-        sizeof(url),
-        AIRLABS_API_BASE "/flights?hex=%s"
+        form,
+        sizeof(form),
+        "hex=%s"
         "&_fields=hex,reg_number,lat,lng,airline_icao,airline_iata,aircraft_icao,"
         "flight_icao,flight_iata,dep_iata,arr_iata,updated,status,"
         "model,manufacturer,engine,engine_count,type&api_key=%s",
@@ -1873,7 +1958,7 @@ static airlabs_enrich_result_t fetch_airlabs_selected_aircraft(
     );
 
     int code = 0;
-    char *body = http_get_fast(url, FETCH_MEDIUM_MAX, &code);
+    char *body = http_post_form_fast(AIRLABS_API_BASE "/flights", form, FETCH_MEDIUM_MAX, &code);
     if (body == NULL || code < 200 || code >= 300) {
         ESP_LOGW(TAG,
                  "AirLabs selected-aircraft lookup failed for %s/%s, code=%d",
@@ -2046,16 +2131,16 @@ static bool fetch_airlabs_airport_city(const char *airport_code,
     const char *filter = strlen(airport_code) == 3
         ? "iata_code"
         : "icao_code";
-    char url[512];
-    snprintf(url,
-             sizeof(url),
-             AIRLABS_API_BASE "/airports?%s=%s&_fields=city,lat,lng&api_key=%s",
+    char form[512];
+    snprintf(form,
+             sizeof(form),
+             "%s=%s&_fields=city,lat,lng&api_key=%s",
              filter,
              encoded_code,
              encoded_key);
 
     int code = 0;
-    char *body = http_get_fast(url, FETCH_SMALL_MAX, &code);
+    char *body = http_post_form_fast(AIRLABS_API_BASE "/airports", form, FETCH_SMALL_MAX, &code);
     if (body == NULL || code < 200 || code >= 300) {
         heap_caps_free(body);
         return false;
@@ -2268,8 +2353,6 @@ static bool publish_metadata_cache(void)
         return false;
     }
 
-    const int now = (int)time(NULL);
-    next.fetched_unix = now > next.fetched_unix ? now : next.fetched_unix + 1;
     write_status(&next);
     return true;
 }
@@ -2301,9 +2384,7 @@ static void finish_requested_aircraft_metadata(void)
     }
     aircraft_enrichment_active = false;
     active_aircraft_icao24[0] = '\0';
-    const int now = (int)time(NULL);
-    status.fetched_unix =
-        now > status.fetched_unix ? now : status.fetched_unix + 1;
+    status.revision++;
     if (status_mutex != NULL) {
         xSemaphoreGive(status_mutex);
     }
@@ -2413,14 +2494,14 @@ static bool url_encode_component(const char *src, char *dst, size_t dst_size)
     return true;
 }
 
-static bool refresh_opensky_token(const app_config_t *cfg)
+static app_api_health_state_t refresh_opensky_token(const app_config_t *cfg)
 {
     char encoded_client_id[300];
     char encoded_client_secret[300];
     if (!url_encode_component(cfg->opensky_client_id, encoded_client_id, sizeof(encoded_client_id)) ||
         !url_encode_component(cfg->opensky_client_secret, encoded_client_secret, sizeof(encoded_client_secret))) {
         ESP_LOGW(TAG, "OpenSky credentials too long to encode");
-        return false;
+        return APP_API_HEALTH_INVALID;
     }
 
     char form[680];
@@ -2434,10 +2515,14 @@ static bool refresh_opensky_token(const app_config_t *cfg)
     char *body = http_post_form(OPENSKY_TOKEN_URL, form, FETCH_SMALL_MAX, &code);
     if (body == NULL || code < 200 || code >= 300) {
         ESP_LOGW(TAG, "OpenSky token refresh failed, code=%d", code);
+        cJSON *reason = body && code == 400 ? cJSON_Parse(body) : NULL;
+        const char *oauth_error = json_string(reason, "error");
+        if (oauth_error && !strcmp(oauth_error, "invalid_client")) code = 401;
+        cJSON_Delete(reason);
         heap_caps_free(body);
         opensky_access_token[0] = '\0';
         opensky_token_expires_unix = 0;
-        return false;
+        return app_provider_health(code, false);
     }
 
     cJSON *root = cJSON_Parse(body);
@@ -2446,14 +2531,16 @@ static bool refresh_opensky_token(const app_config_t *cfg)
     const int expires_in = json_int(root, "expires_in", 1800);
     if (access_token == NULL || access_token[0] == '\0') {
         cJSON_Delete(root);
-        return false;
+        opensky_access_token[0] = '\0';
+        opensky_token_expires_unix = 0;
+        return APP_API_HEALTH_UNAVAILABLE;
     }
 
     copy_string(opensky_access_token, sizeof(opensky_access_token), access_token);
     opensky_token_expires_unix = (int)time(NULL) + expires_in - OPENSKY_TOKEN_REFRESH_MARGIN_SECONDS;
     cJSON_Delete(root);
     ESP_LOGI(TAG, "OpenSky token refreshed");
-    return true;
+    return APP_API_HEALTH_VALID;
 }
 
 static const char *opensky_bearer_token_if_available(const app_config_t *cfg)
@@ -2467,7 +2554,7 @@ static const char *opensky_bearer_token_if_available(const app_config_t *cfg)
         return opensky_access_token;
     }
 
-    return refresh_opensky_token(cfg) ? opensky_access_token : NULL;
+    return refresh_opensky_token(cfg) == APP_API_HEALTH_VALID ? opensky_access_token : NULL;
 }
 
 cJSON *app_data_tracker_opensky(const char *query, int *code)
@@ -2482,17 +2569,20 @@ cJSON *app_data_tracker_opensky(const char *query, int *code)
     char url[320];
     snprintf(url, sizeof(url), "https://opensky-network.org/api/states/all?%s", query);
     const char *token = opensky_bearer_token_if_available(&cfg);
+    int64_t clock_seconds = esp_timer_get_time()/1000000;
+    tracker_priority_until = clock_seconds + 240;
+    /* A bare ICAO24 filter is not the documented receiver-serial filter.
+     * Charge global/wide Tracker searches at the conservative maximum. */
+    if (!app_sky_reserve(&sky_budget[token != NULL], clock_seconds, 4, token != NULL, false)) {
+        *code = APP_OPENSKY_DEFERRED;
+        return NULL;
+    }
     char *body = http_get_bearer(url, token, FETCH_AIRCRAFT_MAX, code);
     if (*code == 401) {
         heap_caps_free(body);
         opensky_access_token[0] = '\0';
         opensky_token_expires_unix = 0;
-        token = opensky_bearer_token_if_available(&cfg);
-        body = token ? http_get_bearer(url, token, FETCH_AIRCRAFT_MAX, code) : NULL;
-    }
-    if (*code == 429) {
-        opensky_rate_limited_until_unix = time(NULL) + AIRCRAFT_RATE_LIMIT_RETRY_MS / 1000;
-        opensky_rate_limit_was_authenticated = token != NULL;
+        body = NULL; /* Next scheduled poll obtains the new token, no unbudgeted retry. */
     }
     cJSON *root = body && *code == 200 ? cJSON_Parse(body) : NULL;
     heap_caps_free(body);
@@ -2528,10 +2618,10 @@ static void publish_api_health(api_health_provider_t provider,
     }
 }
 
-static bool validate_airlabs_credentials(const app_config_t *cfg)
+static app_api_health_state_t validate_airlabs_credentials(const app_config_t *cfg)
 {
     if (cfg == NULL || cfg->airlabs_api_key[0] == '\0') {
-        return false;
+        return APP_API_HEALTH_INVALID;
     }
 
     char encoded_key[384];
@@ -2539,7 +2629,7 @@ static bool validate_airlabs_credentials(const app_config_t *cfg)
             cfg->airlabs_api_key,
             encoded_key,
             sizeof(encoded_key))) {
-        return false;
+        return APP_API_HEALTH_INVALID;
     }
     char form[416];
     snprintf(form, sizeof(form), "api_key=%s", encoded_key);
@@ -2552,7 +2642,7 @@ static bool validate_airlabs_credentials(const app_config_t *cfg)
         &code);
     if (body == NULL || code < 200 || code >= 300) {
         heap_caps_free(body);
-        return false;
+        return app_provider_health(code, false);
     }
 
     cJSON *root = cJSON_Parse(body);
@@ -2561,8 +2651,11 @@ static bool validate_airlabs_credentials(const app_config_t *cfg)
     const bool valid =
         cJSON_IsObject(root) &&
         (error == NULL || cJSON_IsNull(error));
+    const char *why = json_string(error, "code");
+    if (why && (!strcmp(why, "expired_api_key") || !strcmp(why, "unknown_api_key"))) code = 401;
+    else if (why && strstr(why, "_limit_exceeded")) code = 429;
     cJSON_Delete(root);
-    return valid;
+    return app_provider_health(code, valid);
 }
 
 static void validate_api_credentials(void)
@@ -2572,28 +2665,17 @@ static void validate_api_credentials(void)
 
     /* Validate the provisioned key on the device using the same no-cost
      * authorization probe as the companion. */
-    publish_api_health(
-        API_HEALTH_PROVIDER_FLIGHTAWARE,
-        app_tracker_validate_flightaware()
-            ? APP_API_HEALTH_VALID
-            : APP_API_HEALTH_INVALID);
+    int fa_code = app_tracker_flightaware_probe_status();
+    publish_api_health(API_HEALTH_PROVIDER_FLIGHTAWARE, app_provider_health(fa_code, fa_code == 200));
 
-    const bool opensky_valid =
-        cfg.opensky_enabled &&
-        cfg.opensky_client_id[0] != '\0' &&
-        cfg.opensky_client_secret[0] != '\0' &&
-        refresh_opensky_token(&cfg);
     publish_api_health(
         API_HEALTH_PROVIDER_OPENSKY,
-        opensky_valid
-            ? APP_API_HEALTH_VALID
-            : APP_API_HEALTH_INVALID);
+        cfg.opensky_enabled && *cfg.opensky_client_id && *cfg.opensky_client_secret ?
+            refresh_opensky_token(&cfg) : APP_API_HEALTH_INVALID);
 
     publish_api_health(
         API_HEALTH_PROVIDER_AIRLABS,
-        validate_airlabs_credentials(&cfg)
-            ? APP_API_HEALTH_VALID
-            : APP_API_HEALTH_INVALID);
+        validate_airlabs_credentials(&cfg));
 }
 
 static void resolve_api_credentials_offline(void)
@@ -2602,15 +2684,16 @@ static void resolve_api_credentials_offline(void)
     app_config_get(&cfg);
     publish_api_health(
         API_HEALTH_PROVIDER_FLIGHTAWARE,
-        cfg.flightaware_available
-            ? APP_API_HEALTH_VALID
+        *cfg.flightaware_api_key
+            ? APP_API_HEALTH_OFFLINE
             : APP_API_HEALTH_INVALID);
     publish_api_health(
         API_HEALTH_PROVIDER_OPENSKY,
-        APP_API_HEALTH_INVALID);
+        cfg.opensky_enabled && *cfg.opensky_client_id && *cfg.opensky_client_secret ?
+            APP_API_HEALTH_OFFLINE : APP_API_HEALTH_INVALID);
     publish_api_health(
         API_HEALTH_PROVIDER_AIRLABS,
-        APP_API_HEALTH_INVALID);
+        *cfg.airlabs_api_key ? APP_API_HEALTH_OFFLINE : APP_API_HEALTH_INVALID);
 }
 
 static const char *weather_code_summary(int code)
@@ -2990,6 +3073,7 @@ static bool fetch_metar(app_data_status_t *next, const app_config_t *cfg)
     next->metar_temp_c = (int)lround(json_double(first, "temp", 0.0));
     next->metar_wind_kt = json_int(first, "wspd", 0);
     next->metar_wind_deg = json_int(first, "wdir", 0);
+    next->metar_observed_unix = json_int(first, "obsTime", (int)time(NULL));
     next->metar_valid = true;
     cJSON_Delete(root);
     ESP_LOGI(TAG, "METAR updated: %s %s", next->metar_station, next->metar_category);
@@ -3454,7 +3538,6 @@ static void refresh_requested_weather_radar(void)
     if (!fetch_rainviewer(&next) || next.radar_path[0] == '\0') {
         next.weather_radar_overlay_valid = false;
         next.weather_radar_frame_count = 0;
-        next.fetched_unix = (int)time(NULL);
         write_status(&next);
         return;
     }
@@ -3468,7 +3551,6 @@ static void refresh_requested_weather_radar(void)
         ESP_LOGW(TAG, "No PSRAM for weather radar sequence");
         next.weather_radar_overlay_valid = false;
         next.weather_radar_frame_count = 0;
-        next.fetched_unix = (int)time(NULL);
         write_status(&next);
         return;
     }
@@ -3623,8 +3705,7 @@ static void refresh_requested_weather_radar(void)
                  last_http_code,
                  (unsigned)last_png_len);
     }
-    const int now = (int)time(NULL);
-    next.fetched_unix = now > next.fetched_unix ? now : next.fetched_unix + 1;
+    if (decoded_count > 0) next.fetched_unix = (int)time(NULL);
     write_status(&next);
 }
 
@@ -3699,6 +3780,7 @@ static bool publish_aircraft_candidates(app_data_status_t *next,
     next->aircraft_usable_count = accepted_rows;
     next->aircraft_radius_miles = radius_miles;
     next->aircraft_valid = true;
+    next->aircraft_fetched_unix = (int)time(NULL);
     ESP_LOGI(TAG,
              "Aircraft updated via %s: %d %s of %d usable states (%d raw), radius=%.0f mi",
              source,
@@ -3733,7 +3815,11 @@ static bool fetch_aircraft_airplanes_live(app_data_status_t *next,
                                            float radius_miles,
                                            float max_distance_nm)
 {
+    static int64_t next_attempt_ms;
     aircraft_last_fetch_used_fallback = true;
+    int64_t clock_ms = esp_timer_get_time()/1000;
+    if (clock_ms < next_attempt_ms) return false;
+    next_attempt_ms = clock_ms + AIRCRAFT_FALLBACK_REFRESH_MS;
     const int query_radius_nm = (int)ceilf(max_distance_nm);
     char url[192];
     snprintf(url,
@@ -3923,13 +4009,8 @@ static bool fetch_aircraft(app_data_status_t *next, const app_config_t *cfg)
         ? padded_radius_miles / (STATUTE_MI_PER_LAT_DEG * fabs(cos_lat))
         : lat_half;
     const float max_distance_nm = radius_miles * AIRCRAFT_STATUTE_MI_TO_NM * AIRCRAFT_QUERY_PADDING;
-    const bool credentials_configured =
-        cfg->opensky_client_id[0] != '\0' &&
-        cfg->opensky_client_secret[0] != '\0';
     const int now_unix = (int)time(NULL);
-    if (now_unix < opensky_rate_limited_until_unix &&
-        (opensky_rate_limit_was_authenticated ||
-         !credentials_configured)) {
+    if (now_unix < opensky_rate_limited_until_unix) {
         return fetch_aircraft_airplanes_live(
             next,
             lat,
@@ -3945,6 +4026,14 @@ static bool fetch_aircraft(app_data_status_t *next, const app_config_t *cfg)
     int code = 0;
     const char *bearer = opensky_bearer_token_if_available(cfg);
     next->aircraft_auth_used = bearer != NULL;
+    const double area = 4 * lat_half * lon_half;
+    int cost = area <= 25 ? 1 : area <= 100 ? 2 : area <= 400 ? 3 : 4;
+    const int64_t clock_seconds = esp_timer_get_time()/1000000;
+    if (!app_sky_reserve(&sky_budget[bearer != NULL], clock_seconds, cost,
+                         bearer != NULL, clock_seconds < tracker_priority_until)) {
+        next->aircraft_http_status = APP_OPENSKY_DEFERRED;
+        return fetch_aircraft_airplanes_live(next, lat, lon, radius_miles, max_distance_nm);
+    }
     char *body = bearer != NULL
         ? http_get_bearer(url, bearer, FETCH_AIRCRAFT_MAX, &code)
         : http_get(url, FETCH_AIRCRAFT_MAX, &code);
@@ -3953,22 +4042,13 @@ static bool fetch_aircraft(app_data_status_t *next, const app_config_t *cfg)
         heap_caps_free(body);
         opensky_access_token[0] = '\0';
         opensky_token_expires_unix = 0;
-        bearer = opensky_bearer_token_if_available(cfg);
-        body = bearer != NULL
-            ? http_get_bearer(url, bearer, FETCH_AIRCRAFT_MAX, &code)
-            : NULL;
-        next->aircraft_auth_used = bearer != NULL;
+        body = NULL;
     }
 
     next->aircraft_http_status = code;
     if (body == NULL || code < 200 || code >= 300) {
         ESP_LOGW(TAG, "Aircraft states failed, code=%d", code);
         heap_caps_free(body);
-        if (code == 429) {
-            opensky_rate_limited_until_unix =
-                now_unix + AIRCRAFT_RATE_LIMIT_RETRY_MS / 1000;
-            opensky_rate_limit_was_authenticated = bearer != NULL;
-        }
         return fetch_aircraft_airplanes_live(
             next,
             lat,
@@ -4103,20 +4183,8 @@ static TickType_t ticks_until(TickType_t now, TickType_t due)
     return ticks_due(now, due) ? 0 : due - now;
 }
 
-static void publish_progressive_update(app_data_status_t *next)
-{
-    if (next == NULL) {
-        return;
-    }
-    next->state = APP_DATA_READY;
-    const int now = (int)time(NULL);
-    next->fetched_unix = now > next->fetched_unix
-        ? now
-        : next->fetched_unix + 1;
-    write_status(next);
-}
-
-static void fetch_updates(bool include_slow_sources, bool include_aircraft)
+typedef enum { FETCH_WEATHER = 1, FETCH_AIRCRAFT = 2, FETCH_AQ = 4, FETCH_ISS = 8, FETCH_METAR = 16 } fetch_source_t;
+static void fetch_one_source(fetch_source_t source)
 {
     app_config_t cfg;
     app_config_get(&cfg);
@@ -4131,50 +4199,37 @@ static void fetch_updates(bool include_slow_sources, bool include_aircraft)
     }
     set_state(APP_DATA_FETCHING);
     next.state = APP_DATA_FETCHING;
+    next.last_attempt_unix = (int)time(NULL);
 
     bool any = false;
-    if (include_slow_sources) {
-        next.weather_valid = false;
+    switch (source) {
+    case FETCH_WEATHER:
+        if (strcasecmp(next.weather_location_key, weather_cfg.location_key)) {
+            next.weather_valid = false;
+            next.weather_air_quality_valid = false;
+        }
+        any = fetch_weather_current(&next, &weather_cfg);
+        if (any) next.weather_fetched_unix = (int)time(NULL);
+        break;
+    case FETCH_AQ:
         next.weather_air_quality_valid = false;
+        any = fetch_weather_air_quality(&next, &weather_cfg);
+        break;
+    case FETCH_METAR:
         next.metar_valid = false;
-        next.radar_valid = false;
-        const bool weather_updated = fetch_weather_current(&next, &weather_cfg);
-        any |= weather_updated;
-        if (weather_updated) {
-            /* Current conditions and the five-day forecast are now usable.
-             * Do not hold them behind AQ, ISS, METAR, and radar requests. */
-            publish_progressive_update(&next);
-        }
-        const bool air_quality_updated =
-            fetch_weather_air_quality(&next, &weather_cfg);
-        any |= air_quality_updated;
-        if (air_quality_updated) {
-            publish_progressive_update(&next);
-        }
-        any |= fetch_iss_track(&next);
-        any |= fetch_metar(&next, &cfg);
-        /* Radar metadata and tiles are intentionally demand-loaded only when
-         * the user opens the radar view.  They must never delay first paint
-         * of current conditions or the forecast. */
-    }
-    if (include_aircraft && cfg.opensky_enabled) {
-        any |= fetch_aircraft(&next, &cfg);
+        any = fetch_metar(&next, &cfg);
+        break;
+    case FETCH_ISS: any = fetch_iss_track(&next); break;
+    case FETCH_AIRCRAFT:
+        if (cfg.opensky_enabled) any = fetch_aircraft(&next, &cfg);
+        else { next.aircraft_valid = false; next.aircraft_count = 0; }
+        break;
     }
 
     const bool has_cached_data = next.weather_valid || next.metar_valid || next.radar_valid || next.aircraft_valid;
     next.state = (any || has_cached_data) ? APP_DATA_READY : APP_DATA_ERROR;
-    next.fetched_unix = (int)time(NULL);
+    if (any) next.fetched_unix = (int)time(NULL);
     write_status(&next);
-}
-
-static void fetch_all(void)
-{
-    fetch_updates(true, true);
-}
-
-static void fetch_aircraft_only(void)
-{
-    fetch_updates(false, true);
 }
 
 static void data_task(void *arg)
@@ -4182,6 +4237,8 @@ static void data_task(void *arg)
     (void)arg;
     TickType_t next_slow_due = 0;
     TickType_t next_aircraft_due = 0;
+    unsigned pending = 0;
+    bool retry_validation_after_wifi = false;
     while (true) {
         if (data_paused) {
             ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(1000));
@@ -4199,7 +4256,8 @@ static void data_task(void *arg)
             aircraft_refresh_requested = false;
             api_validation_requested = false;
 
-            if (api_requested) {
+            if (api_requested || retry_validation_after_wifi) {
+                retry_validation_after_wifi = false;
                 validate_api_credentials();
             }
 
@@ -4209,29 +4267,30 @@ static void data_task(void *arg)
 
             TickType_t now = xTaskGetTickCount();
             if (full_requested || ticks_due(now, next_slow_due)) {
-                fetch_all();
-                refresh_aircraft_metadata_background();
-                ESP_LOGI(
-                    TAG,
-                    "Data task stack minimum free: %u bytes",
-                    (unsigned)uxTaskGetStackHighWaterMark(NULL));
-                now = xTaskGetTickCount();
+                pending |= FETCH_WEATHER | FETCH_AQ | FETCH_ISS | FETCH_METAR;
                 next_slow_due = now + pdMS_TO_TICKS(DATA_REFRESH_MS);
-                next_aircraft_due = now + pdMS_TO_TICKS(
-                    aircraft_refresh_delay_ms());
-            } else if (aircraft_requested || ticks_due(now, next_aircraft_due)) {
-                fetch_aircraft_only();
-                refresh_aircraft_metadata_background();
-                now = xTaskGetTickCount();
-                next_aircraft_due = now + pdMS_TO_TICKS(
-                    aircraft_refresh_delay_ms());
+            }
+            if (full_requested || aircraft_requested || ticks_due(now, next_aircraft_due))
+                pending |= FETCH_AIRCRAFT;
+            /* One source at a time. Re-evaluate tracker and launch deadlines
+             * between slow providers rather than after the entire batch. No
+             * extra sockets/stacks or additional periodic provider calls. */
+            if (pending) {
+                fetch_source_t source = (fetch_source_t)(pending & (0U - pending));
+                pending &= ~(unsigned)source;
+                fetch_one_source(source);
+                if (source == FETCH_AIRCRAFT) {
+                    next_aircraft_due = xTaskGetTickCount() + pdMS_TO_TICKS(aircraft_refresh_delay_ms());
+                    refresh_aircraft_metadata_background();
+                }
             }
 
             refresh_requested_aircraft_metadata();
             refresh_requested_airline_logo();
             refresh_requested_weather_radar();
 
-            const TickType_t slow_wait = ticks_until(now, next_slow_due);
+            now = xTaskGetTickCount();
+            const TickType_t slow_wait = pending ? 0 : ticks_until(now, next_slow_due);
             const TickType_t aircraft_wait = ticks_until(now, next_aircraft_due);
             TickType_t wait_ticks = slow_wait < aircraft_wait ? slow_wait : aircraft_wait;
             const TickType_t minimum_wait = pdMS_TO_TICKS(250);
@@ -4246,6 +4305,7 @@ static void data_task(void *arg)
             set_state(APP_DATA_WAITING_FOR_WIFI);
             if (api_validation_requested) {
                 api_validation_requested = false;
+                retry_validation_after_wifi = true;
                 resolve_api_credentials_offline();
             }
             ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(2000));
@@ -4479,6 +4539,7 @@ const uint8_t *app_data_get_weather_radar_overlay_frame(
     }
     const bool valid =
         status.weather_radar_overlay_valid &&
+        time(NULL) - status.radar_frame_unix <= 3600 &&
         weather_radar_overlays != NULL &&
         weather_radar_observed_frame_count > 0 &&
         status.weather_radar_frame_count > 0;
@@ -4519,6 +4580,7 @@ void app_data_get_status(app_data_status_t *out)
     if (status_mutex != NULL) {
         xSemaphoreGive(status_mutex);
     }
+    app_expire_observations(out, time(NULL));
 }
 
 const char *app_data_state_text(app_data_state_t state)

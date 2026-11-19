@@ -80,6 +80,35 @@ int main(int argc, char **argv)
     int64_t restored[APP_LAUNCH_REQUESTS_PER_HOUR]; memcpy(restored, attempts, sizeof(attempts));
     assert(app_launch_budget_due(restored, now) == app_launch_budget_due(attempts, now));
     assert(app_launch_budget_due(restored, now + 3601) <= now + 3601);
+    app_launch_entry_t boundary = {.launch = {.valid=true,.net_unix=now+25*3600},.checked=now};
+    assert(app_launch_next_check(&boundary,now)==now+3600);
+    assert(!app_launch_stale_for_mask(&boundary,now+3600,7));
+    boundary.launch.net_unix=now+6*3600+600;
+    assert(app_launch_next_check(&boundary,now)==now+600);
+    assert(!app_launch_stale_for_mask(&boundary,now+601,7));
+    /* Three simultaneous imminent programs share twelve calls per hour:
+     * production pacing, selection and stale thresholds across two hours. */
+    app_launch_entry_t near[3]={0};
+    memset(attempts,0,sizeof(attempts));
+    unsigned taken=0, counts[3]={0};
+    for (unsigned a=0; a<3; a++) { near[a].launch.valid=true; near[a].launch.net_unix=now+3600; }
+    for (int second=0; second<7200; second+=5) {
+        int64_t t=now+second;
+        if (app_launch_budget_due(attempts,t)<=t) {
+            int selected=-1;
+            for (int a=0; a<3; a++) if (near[a].next_check <= t &&
+                (selected<0 || near[a].next_check<near[selected].next_check)) selected=a;
+            if (selected>=0) {
+                attempts[taken++%APP_LAUNCH_REQUESTS_PER_HOUR]=t;
+                counts[selected]++;
+                near[selected].checked=t;
+                near[selected].next_check=app_launch_next_check(&near[selected],t);
+            }
+        }
+        for (unsigned a=0; a<3; a++)
+            if (near[a].checked) assert(!app_launch_stale_for_mask(&near[a],t,7));
+    }
+    assert(taken<=24 && counts[0]>=7 && counts[1]>=7 && counts[2]>=7);
     uint8_t mask = 0;
     j = cJSON_Parse("[\"spacex\",\"nasa\"]"); assert(app_launch_agencies(j, &mask) && mask == 5); cJSON_Delete(j);
     j = cJSON_Parse("[\"unknown\"]"); assert(!app_launch_agencies(j, &mask)); cJSON_Delete(j);

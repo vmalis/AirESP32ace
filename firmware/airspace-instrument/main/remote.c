@@ -2,15 +2,22 @@
 // Created by VM, August 2026
 
 #include "remote.h"
+#include "remote_navigation.h"
 #include "tracker.h"
 #include "launches.h"
+#include "storage_mount.h"
 #include "storage_policy.h"
+#include "artwork_upload.h"
+#include "ff.h"
+#include "diskio_wl.h"
+#include "route_package_policy.h"
 
 #include <ctype.h>
 #include <errno.h>
 #include <dirent.h>
 #include <fcntl.h>
 #include <math.h>
+#include <limits.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -25,12 +32,21 @@
 #include "app_config.h"
 #include "cJSON.h"
 #include "data.h"
+#include "display_health.h"
+#include "esp_system.h"
 #include "driver/usb_serial_jtag.h"
 #include "driver/usb_serial_jtag_vfs.h"
 #include "esp_heap_caps.h"
 #include "esp_http_server.h"
+#include "esp_https_server.h"
+#include "esp_app_desc.h"
+#include "esp_mac.h"
+#include "esp_random.h"
+#include "nvs.h"
+#include <stdatomic.h>
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "esp_tls_errors.h"
 #include "esp_vfs_fat.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
@@ -132,6 +148,43 @@ static void copy_tracker_fields(app_remote_status_t *to, const app_remote_status
 static SemaphoreHandle_t status_mutex;
 static SemaphoreHandle_t config_mutex;
 static httpd_handle_t server;
+/* Created on demand over USB. There are no default keys, open provisioning
+ * routes, or plaintext fallback, including on an upgraded unpaired device. */
+typedef struct {
+    char cert[1024], key[512], token[65];
+} pairing_t;
+static atomic_uint pairing_epoch;
+static unsigned serving_epoch;
+static pairing_t *serving_pair;
+static uint32_t boot_id;
+
+static esp_err_t pairing_read(pairing_t *out) {
+    nvs_handle_t h;
+    esp_err_t rc = nvs_open("airspace_pair", NVS_READONLY, &h);
+    if (rc != ESP_OK) return rc;
+    size_t n = sizeof(*out);
+    rc = nvs_get_blob(h, "pair", out, &n);
+    nvs_close(h);
+    if (rc == ESP_OK && (n != sizeof(*out) ||
+        !memchr(out->cert, 0, sizeof(out->cert)) || !memchr(out->key, 0, sizeof(out->key)) ||
+        strnlen(out->token, sizeof(out->token)) != 64)) return ESP_ERR_INVALID_SIZE;
+    return rc;
+}
+
+static bool authorize_request(httpd_req_t *req) {
+    char header[72] = {0};
+    unsigned diff = 0;
+    if (serving_pair && atomic_load(&pairing_epoch) == serving_epoch &&
+        httpd_req_get_hdr_value_len(req, "Authorization") == 71 &&
+        httpd_req_get_hdr_value_str(req, "Authorization", header, sizeof(header)) == ESP_OK &&
+        !memcmp(header, "Bearer ", 7)) {
+        for (size_t i=0;i<64;++i) diff |= (unsigned)(header[7+i] ^ serving_pair->token[i]);
+        if (diff == 0) return true;
+    }
+    httpd_resp_set_status(req, "401 Unauthorized");
+    httpd_resp_sendstr(req, "Pair this Mac over USB.");
+    return false;
+}
 static int usb_config_fd = -1;
 static bool usb_config_driver_ready;
 static wl_handle_t map_storage_wl_handle = WL_INVALID_HANDLE;
@@ -223,8 +276,9 @@ static uint8_t *route_flag_buffers[2];
 static uint32_t route_flag_loaded_revision[2] = {UINT32_MAX, UINT32_MAX};
 static uint8_t *weather_city_icon_buffer;
 static char weather_city_icon_key[MAP_LOCATION_KEY_MAX];
-static uint32_t weather_city_icon_revision = 1;
-static volatile uint32_t weather_city_icon_valid_mask_cache;
+static atomic_uint weather_city_icon_revision = 1;
+static uint32_t weather_city_icon_loaded_revision; /* display thread only */
+static atomic_uint weather_city_icon_valid_mask_cache;
 
 typedef enum {
     USB_FILE_NONE = 0,
@@ -258,12 +312,16 @@ typedef struct {
 } usb_file_transfer_t;
 
 static usb_file_transfer_t usb_file_transfer;
-static tracked_asset_manifest_t tracked_asset_manifest;
 static uint8_t *usb_file_decode_buffer;
 static bool usb_package_active;
+enum { PACKAGE_NONE, PACKAGE_USB, PACKAGE_WIFI };
+static atomic_int package_owner;
+static atomic_uint package_activity;
+static uint32_t staged_files, confirmed_files;
+static atomic_bool banks_ready;
 static TickType_t usb_package_last_activity_tick;
 
-static esp_err_t apply_state_root(cJSON *root);
+static esp_err_t apply_state_root(cJSON *root,int origin);
 
 typedef struct {
     const char *name;
@@ -458,9 +516,39 @@ static int tracked_flight_slot_clamped(int slot)
     return slot >= 0 && slot < TRACKED_FLIGHT_SLOT_COUNT ? slot : 0;
 }
 
+/* Map rendering runs below the Tracker UI on a 16 KiB LVGL stack. Taking a
+ * complete ~3 KiB status by value here can require *two* copies per call.
+ * Read only the asset selection once; never hold the status lock over FAT. */
+typedef struct {
+    int slot;
+    size_t map_bytes;
+    uint32_t map_revision, route_map_valid_mask;
+    uint32_t route_flag_revision, route_flag_valid_mask;
+    uint32_t radar_map_revision;
+} map_selection_t;
+
+static void read_map_selection(map_selection_t *out)
+{
+    *out = (map_selection_t){0};
+    if (ensure_status_storage() == NULL) return;
+    if (status_mutex != NULL) xSemaphoreTake(status_mutex, portMAX_DELAY);
+    *out = (map_selection_t){
+        .slot = tracked_flight_slot_clamped(status->tracked_flight_slot),
+        .map_bytes = status->map_bytes,
+        .map_revision = status->map_revision,
+        .route_map_valid_mask = status->route_map_valid_mask,
+        .route_flag_revision = status->route_flag_revision,
+        .route_flag_valid_mask = status->route_flag_valid_mask,
+        .radar_map_revision = status->radar_map_revision,
+    };
+    if (status_mutex != NULL) xSemaphoreGive(status_mutex);
+}
+
 static int active_tracked_flight_slot(void)
 {
-    return tracked_flight_slot_clamped(read_status().tracked_flight_slot);
+    map_selection_t selection;
+    read_map_selection(&selection);
+    return selection.slot;
 }
 
 static void route_map_path_for_slot_view(int slot,
@@ -469,18 +557,14 @@ static void route_map_path_for_slot_view(int slot,
                                          size_t path_size)
 {
     slot = tracked_flight_slot_clamped(slot);
+    const unsigned bit = 1U << (4*slot + (view_index == 1));
     const char *stem = view_index == 1 ? "rf" : "rg";
+    const char *ext = app_tracker_asset_generation() & bit ? "alt" : "rgb";
     if (slot == 0) {
-        snprintf(path, path_size, MAP_STORAGE_BASE_PATH "/%s.rgb", stem);
+        snprintf(path, path_size, MAP_STORAGE_BASE_PATH "/%s.%s", stem,ext);
     } else {
-        snprintf(path, path_size, MAP_STORAGE_BASE_PATH "/%s%d.rgb", stem, slot);
+        snprintf(path, path_size, MAP_STORAGE_BASE_PATH "/%s%d.%s", stem, slot,ext);
     }
-}
-
-static void route_map_path_for_view(int view_index, char *path, size_t path_size)
-{
-    route_map_path_for_slot_view(
-        active_tracked_flight_slot(), view_index, path, path_size);
 }
 
 static void route_flag_path_for_slot_endpoint(int slot,
@@ -489,20 +573,14 @@ static void route_flag_path_for_slot_endpoint(int slot,
                                               size_t path_size)
 {
     slot = tracked_flight_slot_clamped(slot);
+    const unsigned bit = 1U << (4*slot + 2 + (endpoint_index == 1));
     const char *stem = endpoint_index == 1 ? "fd" : "fo";
+    const char *ext = app_tracker_asset_generation() & bit ? "alt" : "rgb";
     if (slot == 0) {
-        snprintf(path, path_size, MAP_STORAGE_BASE_PATH "/%s.rgb", stem);
+        snprintf(path, path_size, MAP_STORAGE_BASE_PATH "/%s.%s", stem,ext);
     } else {
-        snprintf(path, path_size, MAP_STORAGE_BASE_PATH "/%s%d.rgb", stem, slot);
+        snprintf(path, path_size, MAP_STORAGE_BASE_PATH "/%s%d.%s", stem, slot,ext);
     }
-}
-
-static void route_flag_path_for_endpoint(int endpoint_index,
-                                         char *path,
-                                         size_t path_size)
-{
-    route_flag_path_for_slot_endpoint(
-        active_tracked_flight_slot(), endpoint_index, path, path_size);
 }
 
 static void radar_map_path_for_key(const char *location_key, int range_index, char *path, size_t path_size)
@@ -581,77 +659,6 @@ static int tracked_asset_kind_index(usb_file_kind_t kind)
     }
 }
 
-static void tracked_asset_manifest_reset(void)
-{
-    memset(&tracked_asset_manifest, 0, sizeof(tracked_asset_manifest));
-    tracked_asset_manifest.magic = TRACKED_ASSET_MANIFEST_MAGIC;
-    tracked_asset_manifest.version = TRACKED_ASSET_MANIFEST_VERSION;
-}
-
-static void tracked_asset_manifest_load(void)
-{
-    tracked_asset_manifest_reset();
-    FILE *file = fopen(TRACKED_ASSET_MANIFEST_PATH, "rb");
-    if (file == NULL) {
-        return;
-    }
-    tracked_asset_manifest_t stored = {0};
-    const bool valid =
-        fread(&stored, 1, sizeof(stored), file) == sizeof(stored) &&
-        stored.magic == TRACKED_ASSET_MANIFEST_MAGIC &&
-        stored.version == TRACKED_ASSET_MANIFEST_VERSION;
-    fclose(file);
-    if (valid) {
-        tracked_asset_manifest = stored;
-    }
-}
-
-static bool tracked_asset_manifest_save(void)
-{
-    FILE *file = fopen(TRACKED_ASSET_MANIFEST_TEMP_PATH, "wb");
-    if (file == NULL) {
-        return false;
-    }
-    const bool payload_written =
-        fwrite(&tracked_asset_manifest,
-               1,
-               sizeof(tracked_asset_manifest),
-               file) == sizeof(tracked_asset_manifest);
-    const bool written = fclose(file) == 0 && payload_written;
-    if (!written) {
-        unlink(TRACKED_ASSET_MANIFEST_TEMP_PATH);
-        return false;
-    }
-    unlink(TRACKED_ASSET_MANIFEST_PATH);
-    if (rename(TRACKED_ASSET_MANIFEST_TEMP_PATH,
-               TRACKED_ASSET_MANIFEST_PATH) != 0) {
-        unlink(TRACKED_ASSET_MANIFEST_TEMP_PATH);
-        return false;
-    }
-    return true;
-}
-
-static void tracked_asset_manifest_clear_slot(int slot)
-{
-    if (slot < 0 || slot >= TRACKED_FLIGHT_SLOT_COUNT) {
-        return;
-    }
-    memset(tracked_asset_manifest.hashes[slot],
-           0,
-           sizeof(tracked_asset_manifest.hashes[slot]));
-}
-
-static bool tracked_asset_manifest_record(usb_file_kind_t kind,
-                                          int slot,
-                                          uint32_t hash)
-{
-    const int index = tracked_asset_kind_index(kind);
-    if (index < 0 || slot < 0 || slot >= TRACKED_FLIGHT_SLOT_COUNT) {
-        return false;
-    }
-    tracked_asset_manifest.hashes[slot][index] = hash;
-    return tracked_asset_manifest_save();
-}
 
 static uint32_t fnv1a_update(
     uint32_t hash,
@@ -1379,7 +1386,7 @@ static void radar_location_key_from_request(httpd_req_t *req, char *key, size_t 
 static esp_err_t send_json(httpd_req_t *req, const char *json)
 {
     httpd_resp_set_type(req, "application/json");
-    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
     return httpd_resp_sendstr(req, json);
 }
 
@@ -1394,13 +1401,12 @@ static char *read_request_body(httpd_req_t *req, size_t max_len)
         return NULL;
     }
 
+    const int64_t deadline = esp_timer_get_time() + 45000000LL;
     int received = 0;
     while (received < req->content_len) {
-        const int ret = httpd_req_recv(req, body + received, req->content_len - received);
+        const int ret = esp_timer_get_time() >= deadline ? -1 : httpd_req_recv(req, body + received, req->content_len - received);
         if (ret <= 0) {
-            if (ret == HTTPD_SOCK_ERR_TIMEOUT) {
-                continue;
-            }
+            /* Timeout or disconnect: terminate this request. */
             heap_caps_free(body);
             return NULL;
         }
@@ -1819,13 +1825,12 @@ static bool write_shared_config_file(const cJSON *root)
 
 static esp_err_t config_get_handler(httpd_req_t *req)
 {
+    if (!authorize_request(req)) return ESP_FAIL;
     cJSON *root = build_shared_config_json(NULL, false, false);
     if (root == NULL) {
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "could not build config");
         return ESP_FAIL;
     }
-    (void)write_shared_config_file(root);
-
     char *body = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);
     if (body == NULL) {
@@ -2435,6 +2440,7 @@ static void finish_config_application(bool reconnect_wifi, bool location_changed
 
 static esp_err_t config_post_handler(httpd_req_t *req)
 {
+    if (!authorize_request(req)) return ESP_FAIL;
     char *body = read_request_body(req, 16384);
     if (body == NULL) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "config JSON must be 1..16384 bytes");
@@ -2550,6 +2556,7 @@ static void usb_file_abort(void)
     memset(&usb_file_transfer, 0, sizeof(usb_file_transfer));
     if (cancel_package && usb_package_active) {
         usb_package_active = false;
+        atomic_store(&package_owner,PACKAGE_NONE);
         app_data_set_paused(false);
     }
 }
@@ -2645,89 +2652,41 @@ static void usb_restore_interrupted_files(void)
     }
 }
 
-/* A tracked-flight sync is authoritative: the companion sends every map and
- * flag that should remain on the device in one package. Clear only the old
- * tracked-flight assets before that package starts. This avoids needing a
- * second full 466x466 map of temporary headroom while preserving radar,
- * weather, clock, space, launch, and configuration assets. */
-static void prepare_tracked_flight_storage(uint32_t retained_slot_mask)
-{
-    usb_file_abort();
-    remove_retired_radar_maps();
-
-    bool manifest_changed = false;
-    char path[96];
-    char temporary_path[101];
-    char backup_path[101];
-    for (int slot = 0; slot < TRACKED_FLIGHT_SLOT_COUNT; slot++) {
-        const bool retain_final_files =
-            (retained_slot_mask & (1UL << slot)) != 0;
-        if (!retain_final_files) {
-            tracked_asset_manifest_clear_slot(slot);
-            manifest_changed = true;
-        }
-        for (int view = 0; view < APP_REMOTE_ROUTE_MAP_VIEW_COUNT; view++) {
-            route_map_path_for_slot_view(slot, view, path, sizeof(path));
-            if (!retain_final_files) {
-                unlink(path);
-            }
-            usb_sibling_path(path, ".usb", temporary_path, sizeof(temporary_path));
-            usb_sibling_path(path, ".bak", backup_path, sizeof(backup_path));
-            unlink(temporary_path);
-            unlink(backup_path);
-        }
-        for (int endpoint = 0; endpoint < 2; endpoint++) {
-            route_flag_path_for_slot_endpoint(slot, endpoint, path, sizeof(path));
-            if (!retain_final_files) {
-                unlink(path);
-            }
-            usb_sibling_path(path, ".usb", temporary_path, sizeof(temporary_path));
-            usb_sibling_path(path, ".bak", backup_path, sizeof(backup_path));
-            unlink(temporary_path);
-            unlink(backup_path);
-        }
-    }
-    if (manifest_changed && !tracked_asset_manifest_save()) {
-        ESP_LOGW(TAG, "Could not update tracked-asset manifest");
-    }
-    unlink(MAP_STORAGE_BASE_PATH "/route.rgb");
-
-    /* The files above are authoritative renderer inputs. Invalidate their
-     * published masks immediately so an interrupted USB package cannot leave
-     * the UI believing that deleted maps and flags are still available. */
-    app_remote_status_t next = read_status();
-    const uint32_t route_map_mask = route_map_valid_mask();
-    const uint32_t route_flag_mask = route_flag_valid_mask();
-    if (next.route_map_valid_mask != route_map_mask ||
-        next.route_flag_valid_mask != route_flag_mask) {
-        next.route_map_valid_mask = route_map_mask;
-        next.route_flag_valid_mask = route_flag_mask;
-        next.map_valid = next.route_map_valid_mask != 0;
-        next.map_bytes = next.map_valid ? APP_REMOTE_MAP_BYTES : 0;
-        next.map_revision++;
-        next.route_flag_revision++;
-        route_flag_loaded_revision[0] = UINT32_MAX;
-        route_flag_loaded_revision[1] = UINT32_MAX;
-        next.revision++;
-        write_status(&next);
-    }
-    ESP_LOGI(TAG,
-             "Tracked-flight storage prepared (retained slots=0x%lx)",
-             (unsigned long)retained_slot_mask);
+/* Bank 0 is the original .rgb filename for in-place v0.1.4 upgrades.
+ * The durable queue stores 16 bits selecting each slot's two maps/two flags.
+ * Unchanged assets are reused. Never erase the active bank to make space. */
+static void other_bank(char *path) {
+    char *ext = strrchr(path,'.');
+    if (ext) memcpy(ext, !strcmp(ext,".rgb") ? ".alt" : ".rgb", 5);
 }
-
-static bool usb_file_matches(const char *path,
-                             usb_file_kind_t kind,
-                             uint8_t slot,
-                             size_t expected_size,
-                             uint32_t expected_hash)
-{
-    if (!file_has_exact_size(path, expected_size)) {
-        return false;
+static void reap_banks(unsigned live_slots) {
+    for (int slot=0; slot<4; ++slot) for (int i=0;i<4;++i) {
+        char path[96];
+        if(i<2) route_map_path_for_slot_view(slot,i,path,sizeof(path));
+        else route_flag_path_for_slot_endpoint(slot,i-2,path,sizeof(path));
+        if (!(live_slots & (1U<<slot))) unlink(path);
+        other_bank(path); unlink(path);
     }
-    const int index = tracked_asset_kind_index(kind);
-    return index >= 0 && slot < TRACKED_FLIGHT_SLOT_COUNT &&
-        tracked_asset_manifest.hashes[slot][index] == expected_hash;
+}
+static bool prepare_tracked_flight_storage(int owner) {
+    if (!atomic_load(&banks_ready)) return false;
+    int previous=atomic_load(&package_owner);
+    unsigned now=xTaskGetTickCount();
+    if (previous && !(previous==PACKAGE_USB && owner==PACKAGE_USB) &&
+        !(previous==PACKAGE_WIFI && (now-atomic_load(&package_activity))>pdMS_TO_TICKS(180000))) return false;
+    if (!atomic_compare_exchange_strong(&package_owner,&previous,owner)) return false;
+    atomic_store(&package_activity,now);
+    staged_files=confirmed_files=0;
+    reap_banks(0xf);
+    return true;
+}
+static bool file_hash_matches(const char *path, size_t expected, uint32_t hash) {
+    if (!file_has_exact_size(path,expected)) return false;
+    FILE *f=fopen(path,"rb"); if (!f) return false;
+    uint8_t bytes[512]; uint32_t actual=2166136261UL; size_t n,total=0;
+    while ((n=fread(bytes,1,sizeof(bytes),f))>0) { actual=fnv1a_update(actual,bytes,n); total+=n; }
+    bool ok=total==expected && !ferror(f) && actual==hash;
+    fclose(f); return ok;
 }
 
 static bool usb_file_name_slot(const char *name,
@@ -2795,13 +2754,20 @@ static void usb_file_begin_transfer(const char *name,
                                     size_t expected_size,
                                     uint32_t expected_hash)
 {
-    if (usb_file_matches(
-            final_path, kind, slot, expected_size, expected_hash)) {
+    if (!usb_package_active || atomic_load(&package_owner)!=PACKAGE_USB) {
+        usb_config_send(USB_FILE_ERROR_PREFIX,"start a tracked-flight package first"); return;
+    }
+    unsigned bit=1U << (4*slot + tracked_asset_kind_index(kind));
+    confirmed_files &= ~bit;
+    staged_files &= ~bit;
+    if (file_hash_matches(final_path, expected_size, expected_hash)) {
+        confirmed_files |= bit;
         usb_config_send(USB_FILE_CACHED_PREFIX, name);
         return;
     }
 
-    if (!storage_can_replace_file(final_path, expected_size)) {
+    char inactive[96]; snprintf(inactive,sizeof(inactive),"%s",final_path); other_bank(inactive);
+    if (!storage_can_replace_file(inactive, expected_size)) {
         const int write_errno = errno;
         usb_file_abort();
         char message[112];
@@ -2816,8 +2782,8 @@ static void usb_file_begin_transfer(const char *name,
     snprintf(usb_file_transfer.name,
              sizeof(usb_file_transfer.name), "%.23s", name);
     snprintf(usb_file_transfer.final_path,
-             sizeof(usb_file_transfer.final_path), "%s", final_path);
-    usb_sibling_path(final_path,
+             sizeof(usb_file_transfer.final_path), "%s", inactive);
+    usb_sibling_path(inactive,
                      ".usb",
                      usb_file_transfer.temporary_path,
                      sizeof(usb_file_transfer.temporary_path));
@@ -3116,14 +3082,8 @@ static void usb_file_finish(void)
         unlink(backup_path);
     }
     usb_file_transfer.temporary_path[0] = '\0';
-    if (!tracked_asset_manifest_record(
-            usb_file_transfer.kind,
-            usb_file_transfer.slot,
-            usb_file_transfer.expected_hash)) {
-        ESP_LOGW(TAG,
-                 "Could not persist checksum for USB asset %s",
-                 usb_file_transfer.name);
-    }
+    unsigned bit=1U << (4*usb_file_transfer.slot + tracked_asset_kind_index(usb_file_transfer.kind));
+    confirmed_files |= bit; staged_files |= bit;
 
     /* A package can contain eight full maps plus its flags. Do not publish
      * each installed file to the renderer independently: that made LVGL load
@@ -3174,6 +3134,58 @@ static void usb_file_finish(void)
     usb_config_send(USB_FILE_DONE_PREFIX, completed_name);
 }
 
+static void usb_send_state_receipt(void)
+{
+    /* Do not allocate a full tracker JSON or touch FAT just to acknowledge
+     * a page turn. Copy scalar fields under the lock, never during USB I/O. */
+    bool valid = false;
+    char flight[97] = ""; /* 16-byte source, worst-case JSON control escaping */
+    unsigned slot = 0, maps = 0, flags = 0;
+    if (status && status_mutex) {
+        xSemaphoreTake(status_mutex, portMAX_DELAY);
+        valid = status->tracked_flight_valid;
+        size_t used = 0;
+        for (size_t i=0; i<sizeof(status->tracked_flight_number) && status->tracked_flight_number[i]; i++) {
+            unsigned char ch = status->tracked_flight_number[i];
+            if (ch < 32) {
+                snprintf(flight + used, sizeof(flight) - used, "\\u%04x", (unsigned)ch);
+                used += 6;
+            } else {
+                if (ch == '"' || ch == '\\') flight[used++] = '\\';
+                flight[used++] = (char)ch;
+            }
+        }
+        flight[used] = 0;
+        slot = status->tracked_flight_slot;
+        maps = status->route_map_valid_mask;
+        flags = status->route_flag_valid_mask;
+        xSemaphoreGive(status_mutex);
+    }
+    char response[256];
+    snprintf(response,sizeof(response),
+        "{\"trackedFlightValid\":%s,\"trackedFlightNumber\":\"%s\","
+        "\"deviceSlot\":%u,\"routeMapMask\":%u,\"routeFlagMask\":%u,\"preparedFlightCount\":%u}",
+        valid ? "true" : "false", flight, slot, maps, flags, app_tracker_prepared_count());
+    usb_config_send(USB_STATE_OK_PREFIX, response);
+}
+
+static esp_err_t apply_navigation(const char *style)
+{
+    if (!style || !*style) return ESP_ERR_INVALID_ARG;
+    if (atomic_load(&package_owner) != PACKAGE_NONE) return ESP_ERR_INVALID_STATE;
+    if (!status || !status_mutex) return ESP_ERR_INVALID_STATE;
+    app_remote_style_t selected = parse_style(style);
+    xSemaphoreTake(status_mutex, portMAX_DELAY);
+    if (selected != status->style) {
+        status->style = selected;
+        status->revision++;
+    }
+    status->state_pushes++;
+    status->last_push_unix = (int)time(NULL);
+    xSemaphoreGive(status_mutex);
+    return ESP_OK;
+}
+
 static void usb_state_set(const char *body)
 {
     cJSON *root = body != NULL ? cJSON_Parse(body) : NULL;
@@ -3185,7 +3197,16 @@ static void usb_state_set(const char *body)
         }
         return;
     }
-    const esp_err_t err = apply_state_root(root);
+    const char *navigation = app_remote_navigation_style(root);
+    if (navigation) {
+        const esp_err_t err = apply_navigation(navigation);
+        cJSON_Delete(root);
+        if (err == ESP_OK) usb_send_state_receipt();
+        else usb_config_send(USB_STATE_ERROR_PREFIX, "invalid or busy screen selection");
+        return;
+    }
+    const esp_err_t err = apply_state_root(root,PACKAGE_USB);
+    if (usb_package_active) atomic_store(&package_owner,PACKAGE_NONE);
     cJSON_Delete(root);
     if (err != ESP_OK) {
         usb_config_send(USB_STATE_ERROR_PREFIX, "invalid state JSON");
@@ -3219,29 +3240,99 @@ static void usb_state_set(const char *body)
     persist_tracked_state(&applied);
     write_status(&applied);
 
-    cJSON *tracker = app_tracker_snapshot();
-    const cJSON *count = cJSON_GetObjectItemCaseSensitive(tracker, "preparedFlightCount");
-    int prepared_count = cJSON_IsNumber(count) ? count->valueint : 0;
-    cJSON_Delete(tracker);
     storage_write_errno = 0;
     refresh_storage_capacity();
-    char response[208];
-    snprintf(
-        response,
-        sizeof(response),
-        "{\"trackedFlightValid\":%s,\"trackedFlightNumber\":\"%.15s\","
-        "\"deviceSlot\":%u,\"routeMapMask\":%lu,\"routeFlagMask\":%lu,\"preparedFlightCount\":%d}",
-        applied.tracked_flight_valid ? "true" : "false",
-        applied.tracked_flight_number,
-        (unsigned)applied.tracked_flight_slot,
-        (unsigned long)applied.route_map_valid_mask,
-        (unsigned long)applied.route_flag_valid_mask,
-        prepared_count);
-    usb_config_send(USB_STATE_OK_PREFIX, response);
+    usb_send_state_receipt();
     if (usb_package_active) {
         usb_package_active = false;
         app_data_set_paused(false);
     }
+}
+
+/* On-demand, read-only inventory for the selected city and active route. A
+ * negative value reports errno, 0 an empty file, otherwise its byte length.
+ * Do not walk user data or probe the filesystem in the regular health poll. */
+static long diagnostic_asset_size(const char *path)
+{
+    struct stat st;
+    if (stat(path, &st) != 0) return -(long)(errno ? errno : EIO);
+    return S_ISREG(st.st_mode) ? (long)st.st_size : -(long)EINVAL;
+}
+
+/* Explicit service check only. Count directory-visible payloads, without
+ * returning names or reading file contents. Free clusters can still be low
+ * even if known maps appear missing. Never use this estimate to delete files. */
+typedef struct { unsigned files, dirs, entries; uint32_t bytes; bool complete; } usage_t;
+static void count_visible_files(const char *path, unsigned depth, usage_t *u)
+{
+    if (depth>5 || u->entries>=1600) { u->complete=false; return; }
+    DIR *dir=opendir(path); if (!dir) { u->complete=false; return; }
+    for (;;) {
+        errno=0;
+        struct dirent *entry=readdir(dir);
+        if (!entry) { if (errno) u->complete=false; break; }
+        if (!strcmp(entry->d_name,".") || !strcmp(entry->d_name,"..")) continue;
+        if (++u->entries>=1600) { u->complete=false; break; }
+        if ((u->entries%16)==0) vTaskDelay(1);
+        char child[128];
+        int n=snprintf(child,sizeof(child),"%s/%s",path,entry->d_name);
+        if (n<0 || (size_t)n>=sizeof(child)) { u->complete=false; continue; }
+        struct stat st;
+        if (stat(child,&st)!=0) { u->complete=false; continue; }
+        if (S_ISDIR(st.st_mode)) { ++u->dirs; count_visible_files(child,depth+1,u); }
+        else if (S_ISREG(st.st_mode) && st.st_size>=0 &&
+                 (uint64_t)st.st_size<=UINT32_MAX-u->bytes) { ++u->files; u->bytes+=(uint32_t)st.st_size; }
+        else u->complete=false;
+    }
+    if (closedir(dir)!=0) u->complete=false;
+}
+static __attribute__((noinline)) void usb_report_volume_usage(void)
+{
+    if (!atomic_load(&banks_ready)) { usb_config_send(USB_CONFIG_ERROR_PREFIX,"storage not ready"); return; }
+    usage_t usage={.complete=true}; uint64_t total=0,available=0;
+    if (esp_vfs_fat_info(MAP_STORAGE_BASE_PATH,&total,&available)!=ESP_OK) {
+        usb_config_send(USB_CONFIG_ERROR_PREFIX,"storage capacity unavailable"); return;
+    }
+    count_visible_files(MAP_STORAGE_BASE_PATH,0,&usage);
+    char raw[220];snprintf(raw,sizeof(raw),"{\"storageTotalBytes\":%lu,\"storageFreeBytes\":%lu,"
+        "\"visibleFileBytes\":%lu,\"visibleFiles\":%u,\"visibleDirectories\":%u,\"scanComplete\":%s}",
+        (unsigned long)total,(unsigned long)available,(unsigned long)usage.bytes,
+        usage.files,usage.dirs,usage.complete?"true":"false");
+    usb_config_send(USB_CONFIG_OK_PREFIX,raw);
+}
+
+static __attribute__((noinline)) void usb_report_artwork(void)
+{
+    if (!atomic_load(&banks_ready)) {
+        usb_config_send(USB_CONFIG_ERROR_PREFIX, "storage not ready"); return;
+    }
+    char raw[448], path[96], key[MAP_LOCATION_KEY_MAX];
+    long radar[3], maps[2], flags[2];
+    selected_location_key(key, sizeof(key));
+    int slot = active_tracked_flight_slot();
+    for (int i=0; i<3; ++i) {
+        radar_map_path_for_key(key,i,path,sizeof(path)); radar[i]=diagnostic_asset_size(path);
+    }
+    for (int i=0; i<2; ++i) {
+        route_map_path_for_slot_view(slot,i,path,sizeof(path)); maps[i]=diagnostic_asset_size(path);
+        route_flag_path_for_slot_endpoint(slot,i,path,sizeof(path)); flags[i]=diagnostic_asset_size(path);
+    }
+    weather_city_icon_path_for_key(key,path,sizeof(path));
+    long city_icon_bytes=diagnostic_asset_size(path);
+    const space_asset_t *strip=space_asset_for_name("iss_flags");
+    long strip_bytes=-ENOENT;
+    if (strip) { space_asset_path(strip,path,sizeof(path)); strip_bytes=diagnostic_asset_size(path); }
+    uint64_t storage_total=0, storage_free=0;
+    const bool measured=esp_vfs_fat_info(MAP_STORAGE_BASE_PATH,&storage_total,&storage_free)==ESP_OK;
+    snprintf(raw,sizeof(raw),"{\"deviceSlot\":%d,\"radarBytes\":[%ld,%ld,%ld],"
+        "\"mapBytes\":[%ld,%ld],\"flagBytes\":[%ld,%ld],\"lastRadarBackground\":%lu,"
+        "\"cityIconBytes\":%ld,\"issFlagBytes\":%ld,\"measuredFreeBytes\":%ld,"
+        "\"lastEmblemSourceWidth\":%lu,\"lastISSFlags\":%lu}",
+        slot,radar[0],radar[1],radar[2],maps[0],maps[1],flags[0],flags[1],
+        (unsigned long)app_display_radar_background(),city_icon_bytes,strip_bytes,
+        measured?(long)storage_free:-1L,(unsigned long)app_display_weather_emblem_width(),
+        (unsigned long)app_display_iss_flags_result());
+    usb_config_send(USB_CONFIG_OK_PREFIX,raw);
 }
 
 static void usb_config_process_line(char *line)
@@ -3257,12 +3348,79 @@ static void usb_config_process_line(char *line)
         *--end = '\0';
     }
 
+    if (!strcmp(line, "ASTCFG:ARTWORK")) { usb_report_artwork(); return; }
+    if (!strcmp(line, "ASTCFG:SPACEUSAGE")) { usb_report_volume_usage(); return; }
+    if (!strcmp(line, "ASTCFG:IDENTITY") || !strcmp(line, "ASTCFG:HEALTH")) {
+        char raw[1024], digest[65];
+        uint8_t mac[6];
+        if (esp_read_mac(mac, ESP_MAC_WIFI_STA) != ESP_OK) {
+            usb_config_send(USB_CONFIG_ERROR_PREFIX, "device identity unavailable"); return;
+        }
+        const esp_app_desc_t *desc = esp_app_get_description();
+        for (unsigned i=0; i<32; ++i) snprintf(digest + i*2, 3, "%02x", desc->app_elf_sha256[i]);
+        app_network_status_t net; app_network_get_status(&net);
+        /* Don't copy the entire renderer snapshot onto the serial task's
+         * stack just to expose a few scalar counters. */
+        char style[32] = ""; uint32_t maps=0,flags=0; bool valid=false; int slot=-1;
+        if (status && status_mutex && xSemaphoreTake(status_mutex, pdMS_TO_TICKS(250)) == pdTRUE) {
+            snprintf(style, sizeof(style), "%s", app_remote_style_text(status->style));
+            maps=status->route_map_valid_mask; flags=status->route_flag_valid_mask;
+            valid=status->tracked_flight_valid;
+            slot=status->tracked_flight_slot;
+            xSemaphoreGive(status_mutex);
+        }
+        app_data_status_t *health = calloc(1,sizeof(*health));
+        if (!health) { usb_config_send(USB_CONFIG_ERROR_PREFIX,"health unavailable"); return; }
+        app_data_get_status(health);
+        snprintf(raw,sizeof(raw),
+            "{\"deviceId\":\"%02X%02X%02X%02X%02X%02X\",\"elfSHA256\":\"%s\","
+            "\"firmwareVersion\":\"%.31s\",\"ip\":\"%.15s\",\"bootId\":%lu,\"uptimeSeconds\":%lld,"
+            "\"wifiState\":\"%s\",\"style\":\"%s\",\"psramFreeKB\":%u,\"psramLargestKB\":%u,"
+            "\"internalFreeKB\":%u,\"internalLargestKB\":%u,\"spaceAssetLoadFailures\":%lu,"
+            "\"trackedFlightValid\":%s,\"routeMapMask\":%lu,\"routeFlagMask\":%lu,"
+            "\"renderedPage\":\"%s\",\"uiHeartbeat\":%lu,\"aircraftFetchedUnix\":%d,"
+            "\"weatherFetchedUnix\":%d,\"aircraftHttpStatus\":%d,\"resetReason\":%d,"
+            "\"uiStackLowBytes\":%lu,\"deviceSlot\":%d}",
+            mac[0],mac[1],mac[2],mac[3],mac[4],mac[5],digest,desc->version,net.ip,
+            (unsigned long)boot_id,(long long)(esp_timer_get_time()/1000000),
+            app_wifi_state_text(net.wifi_state),style,(unsigned)(heap_caps_get_free_size(MALLOC_CAP_SPIRAM)/1024),
+            (unsigned)(heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM)/1024),
+            (unsigned)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL)/1024),
+            (unsigned)(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)/1024),
+            (unsigned long)space_asset_load_failures, valid?"true":"false",(unsigned long)maps,(unsigned long)flags,
+            app_display_last_rendered_page(),(unsigned long)app_display_heartbeat(),health->aircraft_fetched_unix,
+            health->weather_fetched_unix,health->aircraft_http_status,(int)esp_reset_reason(),
+            (unsigned long)app_display_stack_low_bytes(),slot);
+        free(health);
+        usb_config_send(USB_CONFIG_OK_PREFIX,raw); return;
+    }
+    if (!strncmp(line,"ASTCFG:PAIR:",12)) {
+        cJSON *root = cJSON_Parse(line+12);
+        const char *cert=cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(root,"cert"));
+        const char *key=cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(root,"key"));
+        const char *token=cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(root,"token"));
+        pairing_t *p=calloc(1,sizeof(*p)); bool ok=false;
+        if (p && cert && key && token && strlen(cert)<sizeof(p->cert) && strlen(key)<sizeof(p->key) &&
+            strstr(cert,"BEGIN CERTIFICATE") && strstr(key,"PRIVATE KEY") && strlen(token)==64 &&
+            strspn(token,"0123456789abcdef")==64) {
+            strcpy(p->cert,cert); strcpy(p->key,key); strcpy(p->token,token);
+            nvs_handle_t h;
+            if(nvs_open("airspace_pair",NVS_READWRITE,&h)==ESP_OK) {
+                ok=nvs_set_blob(h,"pair",p,sizeof(*p))==ESP_OK && nvs_commit(h)==ESP_OK;
+                nvs_close(h);
+            }
+        }
+        if (ok) atomic_fetch_add(&pairing_epoch,1);
+        free(p); cJSON_Delete(root); memset(line,0,strlen(line));
+        usb_config_send(ok?USB_CONFIG_OK_PREFIX:USB_CONFIG_ERROR_PREFIX,ok?"{}":"could not save pairing");
+        return;
+    }
     if (strcmp(line, USB_CONFIG_PING_COMMAND) == 0) {
         usb_config_send(USB_CONFIG_PONG_PREFIX, "READY");
         return;
     }
     if (strcmp(line, USB_CONFIG_CAPS_COMMAND) == 0) {
-        usb_config_send(USB_CONFIG_CAPS_PREFIX, "BIN1,TRACKER1,LAUNCH1");
+        usb_config_send(USB_CONFIG_CAPS_PREFIX, "BIN1,TRACKER1,LAUNCH1,PAIR1");
         return;
     }
 
@@ -3271,7 +3429,6 @@ static void usb_config_process_line(char *line)
                 strlen(USB_FILE_PREPARE_COMMAND)) == 0 &&
         (line[strlen(USB_FILE_PREPARE_COMMAND)] == '\0' ||
          line[strlen(USB_FILE_PREPARE_COMMAND)] == ':')) {
-        uint32_t retained_slot_mask = 0;
         const char *mask_text = line + strlen(USB_FILE_PREPARE_COMMAND);
         if (*mask_text == ':') {
             char *mask_end = NULL;
@@ -3281,15 +3438,16 @@ static void usb_config_process_line(char *line)
                 usb_config_send(USB_FILE_ERROR_PREFIX, "invalid retained slot mask");
                 return;
             }
-            retained_slot_mask = (uint32_t)parsed;
         }
         /* End any abandoned stream before starting a new authoritative
          * package. The new package immediately re-pauses background fetches. */
         usb_file_abort();
+        if (!prepare_tracked_flight_storage(PACKAGE_USB)) {
+            usb_config_send(USB_FILE_ERROR_PREFIX,"another package is in progress"); return;
+        }
         usb_package_active = true;
         usb_package_last_activity_tick = xTaskGetTickCount();
         app_data_set_paused(true);
-        prepare_tracked_flight_storage(retained_slot_mask);
         usb_config_send(USB_FILE_PREPARED_PREFIX, "READY");
         return;
     }
@@ -3542,6 +3700,7 @@ static void usb_config_task(void *arg)
                 pdMS_TO_TICKS(30000)) {
             ESP_LOGW(TAG, "USB package transaction timed out");
             usb_package_active = false;
+            atomic_store(&package_owner,PACKAGE_NONE);
             app_data_set_paused(false);
         }
     }
@@ -3549,6 +3708,7 @@ static void usb_config_task(void *arg)
 
 static esp_err_t data_refresh_post_handler(httpd_req_t *req)
 {
+    if (!authorize_request(req)) return ESP_FAIL;
     (void)req;
     app_launches_request_refresh();
     app_data_request_refresh();
@@ -3607,6 +3767,7 @@ static uint32_t launch_asset_valid_mask(void)
 
 static esp_err_t status_get_handler(httpd_req_t *req)
 {
+    if (!authorize_request(req)) return ESP_FAIL;
     app_remote_status_t remote = read_status();
     app_network_status_t net;
     app_network_get_status(&net);
@@ -3655,115 +3816,88 @@ static esp_err_t status_get_handler(httpd_req_t *req)
         }
     }
 
-    char *body = (char *)heap_caps_malloc(APP_REMOTE_STATUS_JSON_MAX, MALLOC_CAP_8BIT);
-    if (body == NULL) {
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "could not allocate status JSON");
-        return ESP_FAIL;
+    cJSON *json = cJSON_CreateObject();
+    if (!json) return ESP_ERR_NO_MEM;
+    if (!cJSON_AddBoolToObject(json, "ok", true)) goto oom;
+    if (!cJSON_AddStringToObject(json, "ip", net.ip)) goto oom;
+    if (!cJSON_AddStringToObject(json, "style", app_remote_style_text(remote.style))) goto oom;
+    if (!cJSON_AddNumberToObject(json, "routeProgress", route_progress_milli / 1000.0)) goto oom;
+    if (!cJSON_AddBoolToObject(json, "batteryAvailable", battery.available)) goto oom;
+    if (!cJSON_AddBoolToObject(json, "batteryPresent", battery.present)) goto oom;
+    if (!cJSON_AddBoolToObject(json, "batteryCharging", battery.charging)) goto oom;
+    if (!cJSON_AddNumberToObject(json, "batteryPercent", battery.percent)) goto oom;
+    if (!cJSON_AddNumberToObject(json, "lastPushUnix", remote.last_push_unix)) goto oom;
+    if (!cJSON_AddBoolToObject(json, "trackedFlightValid", remote.tracked_flight_valid)) goto oom;
+    if (!cJSON_AddStringToObject(json, "trackedFlightNumber", remote.tracked_flight_number)) goto oom;
+    if (!cJSON_AddNumberToObject(json, "trackedFlightAltitudeM", remote.tracked_flight_altitude_m)) goto oom;
+    if (!cJSON_AddNumberToObject(json, "trackedFlightSpeedKPH", remote.tracked_flight_speed_kph)) goto oom;
+    if (!cJSON_AddNumberToObject(json, "trackedFlightHeadingDegrees", remote.tracked_flight_heading_deg)) goto oom;
+    if (!cJSON_AddBoolToObject(json, "trackedFlightHeadingValid", remote.tracked_flight_heading_valid)) goto oom;
+    if (!cJSON_AddBoolToObject(json, "deviceLaunchesSupported", true)) goto oom;
+    if (!cJSON_AddBoolToObject(json, "launchValid", remote.launch_valid)) goto oom;
+    if (!cJSON_AddNumberToObject(json, "launchOptionMask", (unsigned)remote.launch_option_mask)) goto oom;
+    if (!cJSON_AddNumberToObject(json, "launchAssetMask", (unsigned long)launch_asset_valid_mask())) goto oom;
+    if (!cJSON_AddNumberToObject(json, "spaceAssetFileMask", (unsigned long)space_asset_valid_mask_cache)) goto oom;
+    if (!cJSON_AddNumberToObject(json, "spaceAssetLoadedMask", (unsigned long)space_asset_loaded_mask())) goto oom;
+    if (!cJSON_AddNumberToObject(json, "spaceAssetExpectedMask", (unsigned long)space_asset_expected_mask())) goto oom;
+    if (!cJSON_AddNumberToObject(json, "spaceAssetLoadFailures", (unsigned long)space_asset_load_failures)) goto oom;
+    if (!cJSON_AddNumberToObject(json, "weatherCityIconMask", (unsigned long)weather_city_icon_valid_mask_cache)) goto oom;
+    if (!cJSON_AddNumberToObject(json, "weatherCityIconExpectedMask", (unsigned long)( app_location_preset_count() >= 32 ? UINT32_MAX : ((1UL << app_location_preset_count()) - 1UL)))) goto oom;
+    if (!cJSON_AddNumberToObject(json, "psramFreeKB", (unsigned)( heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024U))) goto oom;
+    if (!cJSON_AddNumberToObject(json, "psramLargestKB", (unsigned)( heap_caps_get_largest_free_block( MALLOC_CAP_SPIRAM) / 1024U))) goto oom;
+    if (!cJSON_AddNumberToObject(json, "storageTotalBytes", (unsigned long)storage_total_bytes)) goto oom;
+    if (!cJSON_AddNumberToObject(json, "storageFreeBytes", (unsigned long)storage_free_bytes)) goto oom;
+    if (!cJSON_AddNumberToObject(json, "storageWriteErrno", storage_write_errno)) goto oom;
+    if (!cJSON_AddNumberToObject(json, "retiredRadarMapsRemoved", (unsigned long)storage_retired_maps_removed)) goto oom;
+    if (!cJSON_AddNumberToObject(json, "routePointCount", (unsigned)remote.tracked_route_point_count)) goto oom;
+    if (!cJSON_AddStringToObject(json, "wifiState", app_wifi_state_text(net.wifi_state))) goto oom;
+    if (!cJSON_AddStringToObject(json, "ssid", net.configured_ssid)) goto oom;
+    if (!cJSON_AddStringToObject(json, "locationKey", net.location_key)) goto oom;
+    if (!cJSON_AddStringToObject(json, "location", net.location_label)) goto oom;
+    if (!cJSON_AddStringToObject(json, "lat", net.latitude)) goto oom;
+    if (!cJSON_AddStringToObject(json, "lon", net.longitude)) goto oom;
+    if (!cJSON_AddStringToObject(json, "dataState", app_data_state_text(data.state))) goto oom;
+    if (!cJSON_AddNumberToObject(json, "fetchedUnix", data.fetched_unix)) goto oom;
+    if (!cJSON_AddNumberToObject(json, "aircraftFetchedUnix", data.aircraft_fetched_unix)) goto oom;
+    if (!cJSON_AddNumberToObject(json, "weatherFetchedUnix", data.weather_fetched_unix)) goto oom;
+    if (!cJSON_AddBoolToObject(json, "weatherValid", data.weather_valid)) goto oom;
+    if (!cJSON_AddBoolToObject(json, "metarValid", data.metar_valid)) goto oom;
+    if (!cJSON_AddBoolToObject(json, "radarValid", data.radar_valid)) goto oom;
+    if (!cJSON_AddBoolToObject(json, "aircraftValid", data.aircraft_valid)) goto oom;
+    if (!cJSON_AddNumberToObject(json, "aircraftCount", data.aircraft_count)) goto oom;
+    if (!cJSON_AddBoolToObject(json, "aircraftAuthUsed", data.aircraft_auth_used)) goto oom;
+    if (!cJSON_AddNumberToObject(json, "aircraftHttpStatus", data.aircraft_http_status)) goto oom;
+    if (!cJSON_AddBoolToObject(json, "aircraftLabels", net.aircraft_labels_enabled)) goto oom;
+    if (!cJSON_AddBoolToObject(json, "radarWedge", net.radar_wedge_enabled)) goto oom;
+    if (!cJSON_AddStringToObject(json, "accentColor", net.accent_color)) goto oom;
+    if (!cJSON_AddBoolToObject(json, "mapValid", remote.map_valid)) goto oom;
+    if (!cJSON_AddNumberToObject(json, "mapBytes", (unsigned)remote.map_bytes)) goto oom;
+    if (!cJSON_AddNumberToObject(json, "routeMapMask", (unsigned long)remote.route_map_valid_mask)) goto oom;
+    if (!cJSON_AddNumberToObject(json, "routeFlagMask", (unsigned long)remote.route_flag_valid_mask)) goto oom;
+    if (!cJSON_AddBoolToObject(json, "radarMapValid", remote.radar_map_valid)) goto oom;
+    if (!cJSON_AddNumberToObject(json, "radarMapBytes", (unsigned)remote.radar_map_bytes)) goto oom;
+    if (!cJSON_AddNumberToObject(json, "radarMapMask", (unsigned long)remote.radar_map_valid_mask)) goto oom;
+    if (!cJSON_AddStringToObject(json, "radarMapInventory", radar_map_inventory)) goto oom;
+    if (!cJSON_AddNumberToObject(json, "revision", (unsigned long)remote.revision)) goto oom;
+    if (!cJSON_AddNumberToObject(json, "mapRevision", (unsigned long)remote.map_revision)) goto oom;
+    if (!cJSON_AddNumberToObject(json, "radarMapRevision", (unsigned long)remote.radar_map_revision)) goto oom;
+    if (!cJSON_AddNumberToObject(json, "statePushes", (unsigned long)remote.state_pushes)) goto oom;
+    if (!cJSON_AddNumberToObject(json, "mapPushes", (unsigned long)remote.map_pushes)) goto oom;
+    if (!cJSON_AddNumberToObject(json, "radarMapPushes", (unsigned long)remote.radar_map_pushes)) goto oom;
+    if (!cJSON_AddStringToObject(json, "lastError", remote.last_error)) goto oom;
+    {
+        char *encoded = cJSON_PrintUnformatted(json);
+        cJSON_Delete(json);
+        if (!encoded) return ESP_ERR_NO_MEM;
+        esp_err_t rc = send_json(req, encoded); cJSON_free(encoded); return rc;
     }
-
-    snprintf(body, APP_REMOTE_STATUS_JSON_MAX,
-             "{\"ok\":true,\"ip\":\"%s\",\"style\":\"%s\",\"routeProgress\":%d.%03d,"
-             "\"batteryAvailable\":%s,\"batteryPresent\":%s,\"batteryCharging\":%s,\"batteryPercent\":%d,\"lastPushUnix\":%d,"
-             "\"trackedFlightValid\":%s,\"trackedFlightNumber\":\"%s\","
-             "\"trackedFlightAltitudeM\":%d,\"trackedFlightSpeedKPH\":%d,"
-             "\"trackedFlightHeadingDegrees\":%d,\"trackedFlightHeadingValid\":%s,"
-             "\"deviceLaunchesSupported\":true,\"launchValid\":%s,\"launchOptionMask\":%u,\"launchAssetMask\":%lu,"
-             "\"spaceAssetFileMask\":%lu,\"spaceAssetLoadedMask\":%lu,"
-             "\"spaceAssetExpectedMask\":%lu,\"spaceAssetLoadFailures\":%lu,"
-             "\"weatherCityIconMask\":%lu,\"weatherCityIconExpectedMask\":%lu,"
-             "\"psramFreeKB\":%u,\"psramLargestKB\":%u,"
-             "\"storageTotalBytes\":%lu,\"storageFreeBytes\":%lu,\"storageWriteErrno\":%d,"
-             "\"retiredRadarMapsRemoved\":%lu,"
-             "\"routePointCount\":%u,"
-             "\"wifiState\":\"%s\",\"ssid\":\"%s\",\"locationKey\":\"%s\",\"location\":\"%s\",\"lat\":\"%s\",\"lon\":\"%s\","
-             "\"dataState\":\"%s\",\"fetchedUnix\":%d,\"weatherValid\":%s,\"metarValid\":%s,"
-             "\"radarValid\":%s,\"aircraftValid\":%s,\"aircraftCount\":%d,"
-             "\"aircraftAuthUsed\":%s,\"aircraftHttpStatus\":%d,"
-             "\"aircraftLabels\":%s,\"radarWedge\":%s,\"accentColor\":\"%s\","
-             "\"mapValid\":%s,\"mapBytes\":%u,\"routeMapMask\":%lu,\"routeFlagMask\":%lu,"
-             "\"radarMapValid\":%s,\"radarMapBytes\":%u,"
-             "\"radarMapMask\":%lu,\"radarMapInventory\":\"%s\","
-             "\"revision\":%lu,\"mapRevision\":%lu,\"radarMapRevision\":%lu,"
-             "\"statePushes\":%lu,\"mapPushes\":%lu,\"radarMapPushes\":%lu,\"lastError\":\"%s\"}",
-             net.ip,
-             app_remote_style_text(remote.style),
-             route_progress_milli / 1000,
-             route_progress_milli % 1000,
-             battery.available ? "true" : "false",
-             battery.present ? "true" : "false",
-             battery.charging ? "true" : "false",
-             battery.percent,
-             remote.last_push_unix,
-             remote.tracked_flight_valid ? "true" : "false",
-             remote.tracked_flight_number,
-             remote.tracked_flight_altitude_m,
-             remote.tracked_flight_speed_kph,
-             remote.tracked_flight_heading_deg,
-             remote.tracked_flight_heading_valid ? "true" : "false",
-             remote.launch_valid ? "true" : "false",
-             (unsigned)remote.launch_option_mask,
-             (unsigned long)launch_asset_valid_mask(),
-             (unsigned long)space_asset_valid_mask_cache,
-             (unsigned long)space_asset_loaded_mask(),
-             (unsigned long)space_asset_expected_mask(),
-             (unsigned long)space_asset_load_failures,
-             (unsigned long)weather_city_icon_valid_mask_cache,
-             (unsigned long)(
-                 app_location_preset_count() >= 32
-                     ? UINT32_MAX
-                     : ((1UL << app_location_preset_count()) - 1UL)),
-             (unsigned)(
-                 heap_caps_get_free_size(MALLOC_CAP_SPIRAM) /
-                 1024U),
-             (unsigned)(
-                 heap_caps_get_largest_free_block(
-                     MALLOC_CAP_SPIRAM) /
-                 1024U),
-             (unsigned long)storage_total_bytes,
-             (unsigned long)storage_free_bytes,
-             storage_write_errno,
-             (unsigned long)storage_retired_maps_removed,
-             (unsigned)remote.tracked_route_point_count,
-             app_wifi_state_text(net.wifi_state),
-             net.configured_ssid,
-             net.location_key,
-             net.location_label,
-             net.latitude,
-             net.longitude,
-             app_data_state_text(data.state),
-             data.fetched_unix,
-             data.weather_valid ? "true" : "false",
-             data.metar_valid ? "true" : "false",
-             data.radar_valid ? "true" : "false",
-             data.aircraft_valid ? "true" : "false",
-             data.aircraft_count,
-             data.aircraft_auth_used ? "true" : "false",
-             data.aircraft_http_status,
-             net.aircraft_labels_enabled ? "true" : "false",
-             net.radar_wedge_enabled ? "true" : "false",
-             net.accent_color,
-             remote.map_valid ? "true" : "false",
-             (unsigned)remote.map_bytes,
-             (unsigned long)remote.route_map_valid_mask,
-             (unsigned long)remote.route_flag_valid_mask,
-             remote.radar_map_valid ? "true" : "false",
-             (unsigned)remote.radar_map_bytes,
-             (unsigned long)remote.radar_map_valid_mask,
-             radar_map_inventory,
-             (unsigned long)remote.revision,
-             (unsigned long)remote.map_revision,
-             (unsigned long)remote.radar_map_revision,
-             (unsigned long)remote.state_pushes,
-             (unsigned long)remote.map_pushes,
-             (unsigned long)remote.radar_map_pushes,
-             remote.last_error);
-    esp_err_t err = send_json(req, body);
-    heap_caps_free(body);
-    return err;
+oom:
+    cJSON_Delete(json); return ESP_ERR_NO_MEM;
 }
 
 static esp_err_t aircraft_get_handler(httpd_req_t *req)
 {
+    if (!authorize_request(req)) return ESP_FAIL;
     app_data_status_t data;
     app_data_get_status(&data);
 
@@ -3781,7 +3915,7 @@ static esp_err_t aircraft_get_handler(httpd_req_t *req)
     cJSON_AddNumberToObject(root, "aircraftHttpStatus", data.aircraft_http_status);
     cJSON_AddNumberToObject(root, "aircraftRadiusMiles", data.aircraft_radius_miles);
     cJSON_AddBoolToObject(root, "aircraftAuthUsed", data.aircraft_auth_used);
-    cJSON_AddNumberToObject(root, "fetchedUnix", data.fetched_unix);
+    cJSON_AddNumberToObject(root, "fetchedUnix", data.aircraft_fetched_unix);
     cJSON_AddNumberToObject(root, "nowUnix", (double)time(NULL));
 
     cJSON *items = cJSON_AddArrayToObject(root, "aircraft");
@@ -3871,6 +4005,7 @@ static esp_err_t aircraft_get_handler(httpd_req_t *req)
 
 static esp_err_t weather_get_handler(httpd_req_t *req)
 {
+    if (!authorize_request(req)) return ESP_FAIL;
     app_data_status_t data;
     app_data_get_status(&data);
 
@@ -3890,7 +4025,7 @@ static esp_err_t weather_get_handler(httpd_req_t *req)
         "airQualityValid",
         data.weather_air_quality_valid);
     cJSON_AddStringToObject(root, "locationKey", data.weather_location_key);
-    cJSON_AddNumberToObject(root, "fetchedUnix", data.fetched_unix);
+    cJSON_AddNumberToObject(root, "fetchedUnix", data.weather_fetched_unix);
     cJSON_AddNumberToObject(root, "temperature", data.weather_temperature);
     cJSON_AddNumberToObject(
         root,
@@ -4373,8 +4508,10 @@ bool app_remote_decode_state(const cJSON *root, app_remote_status_t *out)
     return true;
 }
 
-static esp_err_t apply_state_root(cJSON *root)
+static esp_err_t apply_state_root(cJSON *root,int origin)
 {
+    const char *navigation = app_remote_navigation_style(root);
+    if (navigation) return apply_navigation(navigation);
     const cJSON *agencies = cJSON_GetObjectItemCaseSensitive(root, "launchAgencies");
     if (agencies) {
         app_config_t cfg; app_config_get(&cfg);
@@ -4385,7 +4522,26 @@ static esp_err_t apply_state_root(cJSON *root)
     }
     app_remote_status_t next;
     if (cJSON_HasObjectItem(root, "trackerQueue")) {
+        cJSON *queue = cJSON_GetObjectItemCaseSensitive(root,"trackerQueue"), *item;
+        unsigned mask=0,slots=0;
+        if (!cJSON_IsArray(queue)) return ESP_ERR_INVALID_ARG;
+        cJSON_ArrayForEach(item,queue) {
+            cJSON *s=cJSON_GetObjectItemCaseSensitive(item,"deviceSlot");
+            if (!cJSON_IsNumber(s) || s->valueint<0 || s->valueint>=4) return ESP_ERR_INVALID_ARG;
+            slots |= 1U<<s->valueint; mask |= 15U<<(4*s->valueint);
+        }
+        int owner=atomic_load(&package_owner);
+        uint32_t next_banks=0;
+        if ((owner && owner!=origin) || (mask && owner!=origin) ||
+            !app_route_package_next(app_tracker_asset_generation(),mask,owner ? confirmed_files : 0,
+                                    owner ? staged_files : 0,&next_banks))
+            return ESP_ERR_INVALID_STATE;
+        cJSON_DeleteItemFromObjectCaseSensitive(root,"assetGeneration");
+        if (!cJSON_AddNumberToObject(root,"assetGeneration",next_banks)) return ESP_ERR_NO_MEM;
         if (!app_tracker_install(root)) return ESP_ERR_INVALID_ARG;
+        /* The queue's atomic save is the commit. After a reset, path lookup
+         * derives from that same record, never from partially transferred files. */
+        reap_banks(slots);
         next = read_status();
         const cJSON *style = cJSON_GetObjectItemCaseSensitive(root, "style");
         if (cJSON_IsString(style)) next.style = parse_style(style->valuestring);
@@ -4393,6 +4549,7 @@ static esp_err_t apply_state_root(cJSON *root)
         next.state_pushes++;
         next.revision++;
         write_status(&next);
+        atomic_store(&package_owner,PACKAGE_NONE);
         return ESP_OK;
     }
     next = read_status();
@@ -4415,6 +4572,7 @@ static esp_err_t apply_state_root(cJSON *root)
 
 static esp_err_t state_post_handler(httpd_req_t *req)
 {
+    if (!authorize_request(req)) return ESP_FAIL;
     char *body = read_request_body(req, 20 * 1024);
     if (body == NULL) {
         httpd_resp_send_err(
@@ -4430,7 +4588,7 @@ static esp_err_t state_post_handler(httpd_req_t *req)
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "invalid JSON");
         return ESP_FAIL;
     }
-    const esp_err_t err = apply_state_root(root);
+    const esp_err_t err = apply_state_root(root,PACKAGE_WIFI);
     cJSON_Delete(root);
     if (err != ESP_OK) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "invalid state JSON");
@@ -4439,129 +4597,187 @@ static esp_err_t state_post_handler(httpd_req_t *req)
     return send_json(req, "{\"ok\":true}");
 }
 
-static esp_err_t receive_map(httpd_req_t *req,
-                             map_store_t *store,
-                             const char *label,
-                             bool radar_map,
-                             int radar_range_index,
-                             int route_view_index,
-                             int route_slot,
-                             const char *location_key)
+typedef struct {
+    httpd_req_t *req;
+    int64_t deadline;
+    size_t prefix;
+    bool space;
+} art_request_t;
+
+static int art_capacity(void *unused, uint64_t *available, uint32_t *cluster)
 {
-    (void)store;
-    if (req->content_len != APP_REMOTE_MAP_BYTES) {
-        char error[96];
-        snprintf(error, sizeof(error), "expected %u bytes RGB565", (unsigned)APP_REMOTE_MAP_BYTES);
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, error);
-        return ESP_FAIL;
+    (void)unused;
+    errno=EIO;
+    if (map_storage_wl_handle==WL_INVALID_HANDLE) return -1;
+    const unsigned drive_id=ff_diskio_get_pdrv_wl(map_storage_wl_handle);
+    if (drive_id>=FF_VOLUMES || drive_id>9) return -1;
+    const char drive[]={(char)('0'+drive_id),':',0};
+    DWORD free_clusters=0; FATFS *fs=NULL;
+    if (f_getfree(drive,&free_clusters,&fs)!=FR_OK || !fs || fs->n_fatent<=2 ||
+        free_clusters>fs->n_fatent-2) return -1;
+    unsigned sector=FF_MIN_SS;
+#if FF_MIN_SS != FF_MAX_SS
+    sector=fs->ssize;
+#endif
+    if (sector!=wl_sector_size(map_storage_wl_handle)) return -1;
+    *cluster=(uint32_t)fs->csize*sector;
+    const uint64_t total=(uint64_t)(fs->n_fatent-2)*(*cluster);
+    if (!*cluster || (*cluster&(*cluster-1)) || *cluster>131072 ||
+        total>wl_size(map_storage_wl_handle)) return -1;
+    *available=(uint64_t)free_clusters*(*cluster);
+    storage_free_bytes=(uint32_t)*available; storage_total_bytes=(uint32_t)total;
+    errno=0; return 0;
+}
+
+static int art_receive(void *arg, uint8_t *buf, size_t want)
+{
+    art_request_t *a=arg;
+    int64_t last=esp_timer_get_time(); size_t got=0;
+    while (got<want) {
+        const int64_t now=esp_timer_get_time();
+        if (now>=a->deadline || now-last>=20000000LL) return -ETIMEDOUT;
+        /* IDF's HTTP header parser prefetches up to 128 body bytes. Mixing
+         * pending bytes and a raw TLS WANT_READ in one httpd_req_recv loses
+         * the pending bytes in IDF 5.5. Drain just that prefix separately. */
+        size_t n=a->prefix ? 1 : want-got;
+        int count=httpd_req_recv(a->req,(char *)buf+got,n);
+        if (count>0) {
+            got+=(size_t)count; last=esp_timer_get_time();
+            if (!a->prefix) break;
+            --a->prefix; continue;
+        }
+        if (count!=HTTPD_SOCK_ERR_TIMEOUT && count!=ESP_TLS_ERR_SSL_WANT_READ &&
+            count!=ESP_TLS_ERR_SSL_WANT_WRITE && count!=ESP_TLS_ERR_SSL_TIMEOUT) return 0;
+        vTaskDelay(1);
     }
+    return (int)got;
+}
+static void art_lock(void *arg) {
+    if (((art_request_t *)arg)->space && space_asset_mutex) xSemaphoreTake(space_asset_mutex,portMAX_DELAY);
+}
+static void art_unlock(void *arg) {
+    if (((art_request_t *)arg)->space && space_asset_mutex) xSemaphoreGive(space_asset_mutex);
+}
 
-    int received = 0;
-
-    char path[96];
-    if (radar_map) {
-        radar_map_path_for_key(location_key, radar_range_index, path, sizeof(path));
-    } else {
-        route_map_path_for_slot_view(route_slot, route_view_index, path, sizeof(path));
+static esp_err_t receive_artwork(httpd_req_t *req,const char *path,const char *dir,
+                                  bool official,uint32_t expected)
+{
+    const int64_t now=esp_timer_get_time();
+    /* Progress within 20s; total at most 45s plus one second per KiB. A
+     * progressing map doesn't timeout merely for taking more than 45s. */
+    art_request_t a={req,now+45000000LL+((req->content_len+1023)/1024)*1000000LL,128,official};
+    app_art_io_t io={&a,art_capacity,art_receive,art_lock,art_unlock};
+    app_art_report_t r={0};
+    bool known=official;
+    app_art_result_t rc=ART_BAD_CONTENT;
+    size_t hdr=httpd_req_get_hdr_value_len(req,"X-Asset-FNV32");
+    if (hdr) {
+        char h[9];
+        if (hdr!=8 || httpd_req_get_hdr_value_str(req,"X-Asset-FNV32",h,sizeof(h))!=ESP_OK ||
+            strspn(h,"0123456789abcdefABCDEF")!=8) goto fail;
+        uint32_t sent=(uint32_t)strtoul(h,NULL,16);
+        if (official && sent!=expected) goto fail;
+        expected=sent; known=true;
     }
-
-    if (!storage_can_replace_file(path, APP_REMOTE_MAP_BYTES)) {
-        char message[112];
-        storage_failure_message(message, sizeof(message), errno);
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, message);
-        return ESP_FAIL;
+    uint32_t cluster;
+    if (!atomic_load(&banks_ready) || art_capacity(NULL,&r.free_bytes,&cluster)<0) {
+        rc=ART_VOLUME_UNAVAILABLE; r.sys_errno=EIO; goto fail;
     }
-
-    FILE *file = fopen(path, "wb");
-    if (file == NULL) {
-        char error[96];
-        snprintf(error, sizeof(error), "could not open map file: errno=%d", errno);
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, error);
-        return ESP_FAIL;
+    if (dir) {
+        struct stat st;
+        if (stat(dir,&st)<0) {
+            if (errno!=ENOENT) { rc=ART_MEDIA_IO; r.sys_errno=errno; goto fail; }
+            if (!app_artwork_required(req->content_len,cluster,&r.needed_bytes) ||
+                r.free_bytes<r.needed_bytes+cluster) { rc=ART_NO_SPACE; r.needed_bytes+=cluster; r.sys_errno=ENOSPC; goto fail; }
+            if (mkdir(dir,0775)<0) { rc=errno==ENOSPC?ART_NO_SPACE:ART_MEDIA_IO; r.sys_errno=errno; goto fail; }
+        } else if (!S_ISDIR(st.st_mode)) { rc=ART_CONFLICT; r.sys_errno=ENOTDIR; goto fail; }
     }
+    rc=app_artwork_install(path,req->content_len,known,expected,&io,&r);
+    if (rc==ART_OK) { storage_write_errno=0; refresh_storage_capacity(); return ESP_OK; }
+fail:;
+    static const char *const statuses[]={"200 OK","422 Unprocessable Content","507 Insufficient Storage",
+        "503 Service Unavailable","500 Internal Server Error","409 Conflict","408 Request Timeout","400 Bad Request"};
+    static const char *const errors[]={"ok","invalid_artwork","storage_reserve","volume_unavailable",
+        "storage_io","recovery_required","receive_timeout","peer_closed"};
+    if (rc==ART_NO_SPACE || rc==ART_MEDIA_IO || rc==ART_VOLUME_UNAVAILABLE || rc==ART_CONFLICT)
+        storage_write_errno=r.sys_errno?r.sys_errno:EIO;
+    char body[160];
+    snprintf(body,sizeof(body),"{\"error\":\"%s\",\"errno\":%d,\"freeBytes\":%lu,\"neededBytes\":%lu,\"receivedBytes\":%u}",
+        errors[rc],r.sys_errno,(unsigned long)r.free_bytes,(unsigned long)r.needed_bytes,(unsigned)r.received);
+    httpd_resp_set_status(req,statuses[rc]); (void)send_json(req,body);
+    return ESP_FAIL; /* may not have consumed the request body */
+}
 
-    uint8_t scratch[2048];
-    while (received < req->content_len) {
-        const int remaining = req->content_len - received;
-        const int want = remaining < (int)sizeof(scratch) ? remaining : (int)sizeof(scratch);
-        const int chunk = httpd_req_recv(req, (char *)scratch, want);
-        if (chunk <= 0) {
-            if (chunk == HTTPD_SOCK_ERR_TIMEOUT) {
-                continue;
-            }
-            fclose(file);
-            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "map receive failed");
+static esp_err_t receive_radar_map(httpd_req_t *req,int range,const char *key)
+{
+    if (req->content_len!=APP_REMOTE_MAP_BYTES || strlen(key)>4) {
+        httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"invalid radar artwork"); return ESP_FAIL;
+    }
+    char path[96],selected[MAP_LOCATION_KEY_MAX];
+    radar_map_path_for_key(key,range,path,sizeof(path));
+    if (receive_artwork(req,path,NULL,false,0)!=ESP_OK) return ESP_FAIL;
+    selected_location_key(selected,sizeof(selected));
+    uint32_t mask=radar_map_mask_for_location_key(selected);
+    if (status_mutex) xSemaphoreTake(status_mutex,portMAX_DELAY);
+    if (status) {
+        status->radar_map_valid_mask=mask;
+        status->radar_map_valid=mask!=0;
+        status->radar_map_bytes=mask?APP_REMOTE_MAP_BYTES:0;
+        status->radar_map_revision++; status->radar_map_pushes++; status->revision++;
+        status->last_push_unix=(int)time(NULL);
+    }
+    if (status_mutex) xSemaphoreGive(status_mutex);
+    return send_json(req,"{\"ok\":true}");
+}
+
+static esp_err_t stage_wifi_asset(httpd_req_t *req,int slot,int kind) {
+    if (atomic_load(&package_owner)!=PACKAGE_WIFI) {
+        httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"prepare a package first"); return ESP_FAIL;
+    }
+    atomic_store(&package_activity, xTaskGetTickCount());
+    const size_t expected=kind<2?APP_REMOTE_MAP_BYTES:APP_REMOTE_ROUTE_FLAG_BYTES;
+    char header[9]={0},path[96];
+    if (slot<0 || slot>3 || kind<0 || kind>3 || req->content_len!=expected ||
+        httpd_req_get_hdr_value_str(req,"X-Asset-FNV32",header,sizeof(header))!=ESP_OK ||
+        strlen(header)!=8 || strspn(header,"0123456789abcdefABCDEF")!=8) {
+        httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"invalid tracked asset"); return ESP_FAIL;
+    }
+    const uint32_t hash=(uint32_t)strtoul(header,NULL,16);
+    const unsigned bit=1U<<(slot*4+kind);
+    confirmed_files &= ~bit; staged_files &= ~bit;
+    if(kind<2) route_map_path_for_slot_view(slot,kind,path,sizeof(path));
+    else route_flag_path_for_slot_endpoint(slot,kind-2,path,sizeof(path));
+    bool same=file_hash_matches(path,expected,hash);
+    FILE *f=NULL;
+    if(!same) {
+        other_bank(path);
+        if(!storage_can_replace_file(path,expected) || !(f=fopen(path,"wb"))) {
+            httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"not enough space to safely stage this package; previous flights preserved");
             return ESP_FAIL;
         }
-        if (fwrite(scratch, 1, chunk, file) != (size_t)chunk) {
-            const int write_errno = errno;
-            fclose(file);
-            unlink(path);
-            char message[112];
-            storage_failure_message(message, sizeof(message), write_errno);
-            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, message);
-            return ESP_FAIL;
-        }
-        received += chunk;
-        vTaskDelay(pdMS_TO_TICKS(1));
     }
-    if (fclose(file) != 0) {
-        const int write_errno = errno;
-        unlink(path);
-        char message[112];
-        storage_failure_message(message, sizeof(message), write_errno);
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, message);
-        return ESP_FAIL;
+    size_t remaining=expected; uint32_t actual=2166136261UL; uint8_t bytes[2048];
+    int64_t deadline=esp_timer_get_time()+45000000LL;
+    while (remaining && esp_timer_get_time()<deadline) {
+        int n=httpd_req_recv(req,(char*)bytes,remaining<sizeof(bytes)?remaining:sizeof(bytes));
+        if(n<=0 || (f && fwrite(bytes,1,n,f)!=(size_t)n)) break;
+        actual=fnv1a_update(actual,bytes,n); remaining-=(size_t)n;
     }
-
-    storage_write_errno = 0;
-    refresh_storage_capacity();
-
-    app_remote_status_t next = read_status();
-    /* Do not free the decoded map here. The HTTP task can finish an upload
-     * while the LVGL task is copying the currently active map into its padded
-     * tile buffer. Freeing it from this task created a narrow use-after-free
-     * window and intermittent reboots during tracked-flight map pushes. The
-     * incremented revision below makes the LVGL task reload the new closed
-     * file safely on its next render; normal screen changes still reclaim
-     * inactive route/radar stores. */
-    if (radar_map) {
-        if (radar_range_index < 0 || radar_range_index >= APP_REMOTE_RADAR_MAP_RANGE_COUNT) {
-            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "radar range must be one of 10,20,50");
-            return ESP_FAIL;
-        }
-        char selected_key[MAP_LOCATION_KEY_MAX];
-        selected_location_key(selected_key, sizeof(selected_key));
-        next.radar_map_valid_mask = radar_map_mask_for_location_key(selected_key);
-        next.radar_map_valid = next.radar_map_valid_mask != 0;
-        next.radar_map_bytes = next.radar_map_valid ? APP_REMOTE_MAP_BYTES : 0;
-        next.radar_map_revision++;
-        next.radar_map_pushes++;
-    } else if (route_slot == next.tracked_flight_slot) {
-        next.route_map_valid_mask = route_map_valid_mask_for_slot(route_slot);
-        next.map_valid = next.route_map_valid_mask != 0;
-        next.map_bytes = next.map_valid ? APP_REMOTE_MAP_BYTES : 0;
-        next.map_revision++;
-        next.map_pushes++;
-        if (next.route_map_valid_mask == ((1UL << APP_REMOTE_ROUTE_MAP_VIEW_COUNT) - 1UL)) {
-            unlink(MAP_STORAGE_BASE_PATH "/route.rgb");
-        }
+    bool ok=!remaining && actual==hash;
+    if(f && fclose(f)!=0) ok=false;
+    if(!ok) {
+        if(!same) unlink(path);
+        httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"incomplete asset; previous flights preserved"); return ESP_FAIL;
     }
-    next.revision++;
-    next.last_push_unix = (int)time(NULL);
-    next.last_error[0] = '\0';
-    write_status(&next);
-
-    ESP_LOGI(TAG, "%s map pushed to flash: %d bytes rev=%lu path=%s",
-             label,
-             received,
-             (unsigned long)(radar_map ? next.radar_map_revision : next.map_revision),
-             path);
-    return send_json(req, "{\"ok\":true}");
+    if(!same) staged_files|=bit;
+    confirmed_files|=bit;
+    atomic_store(&package_activity,xTaskGetTickCount());
+    return send_json(req,"{\"ok\":true}");
 }
 
 static esp_err_t map_post_handler(httpd_req_t *req)
 {
+    if (!authorize_request(req)) return ESP_FAIL;
     char query[64];
     char prepare_value[8];
     if (httpd_req_get_url_query_str(req, query, sizeof(query)) == ESP_OK &&
@@ -4572,7 +4788,9 @@ static esp_err_t map_post_handler(httpd_req_t *req)
             sizeof(prepare_value)) == ESP_OK &&
         (strcmp(prepare_value, "1") == 0 ||
          strcasecmp(prepare_value, "true") == 0)) {
-        prepare_tracked_flight_storage(0);
+        if (!prepare_tracked_flight_storage(PACKAGE_WIFI)) {
+            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "another package is in progress"); return ESP_FAIL;
+        }
         return send_json(req, "{\"ok\":true,\"prepared\":true}");
     }
 
@@ -4586,103 +4804,20 @@ static esp_err_t map_post_handler(httpd_req_t *req)
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "flight slot must be 0..3");
         return ESP_FAIL;
     }
-    return receive_map(req,
-                       &route_map_store,
-                       view_index == 1 ? "route frame" : "route globe",
-                       false,
-                       -1,
-                       view_index,
-                       slot,
-                       NULL);
+    return stage_wifi_asset(req,slot,view_index);
 }
 
 static esp_err_t flag_post_handler(httpd_req_t *req)
 {
-    const int endpoint_index = route_endpoint_index_from_request(req);
-    const int slot = route_slot_from_request(req);
-    if (endpoint_index < 0 || endpoint_index > 1) {
-        httpd_resp_send_err(req,
-                            HTTPD_400_BAD_REQUEST,
-                            "flag endpoint must be origin or destination");
-        return ESP_FAIL;
-    }
-    if (slot < 0) {
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "flight slot must be 0..3");
-        return ESP_FAIL;
-    }
-    if (req->content_len != APP_REMOTE_ROUTE_FLAG_BYTES) {
-        char error[96];
-        snprintf(error,
-                 sizeof(error),
-                 "expected %u bytes RGB565 flag",
-                 (unsigned)APP_REMOTE_ROUTE_FLAG_BYTES);
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, error);
-        return ESP_FAIL;
-    }
-
-    char path[96];
-    route_flag_path_for_slot_endpoint(slot, endpoint_index, path, sizeof(path));
-    FILE *file = fopen(path, "wb");
-    if (file == NULL) {
-        httpd_resp_send_err(req,
-                            HTTPD_500_INTERNAL_SERVER_ERROR,
-                            "could not open flag file");
-        return ESP_FAIL;
-    }
-
-    uint8_t scratch[512];
-    int received = 0;
-    bool write_ok = true;
-    while (received < req->content_len) {
-        const int remaining = req->content_len - received;
-        const int wanted =
-            remaining < (int)sizeof(scratch) ? remaining : (int)sizeof(scratch);
-        const int chunk = httpd_req_recv(req, (char *)scratch, wanted);
-        if (chunk <= 0) {
-            if (chunk == HTTPD_SOCK_ERR_TIMEOUT) {
-                continue;
-            }
-            write_ok = false;
-            break;
-        }
-        if (fwrite(scratch, 1, chunk, file) != (size_t)chunk) {
-            write_ok = false;
-            break;
-        }
-        received += chunk;
-    }
-    if (fclose(file) != 0) {
-        write_ok = false;
-    }
-    if (!write_ok || received != APP_REMOTE_ROUTE_FLAG_BYTES) {
-        unlink(path);
-        httpd_resp_send_err(req,
-                            HTTPD_500_INTERNAL_SERVER_ERROR,
-                            "flag receive failed");
-        return ESP_FAIL;
-    }
-
-    app_remote_status_t next = read_status();
-    if (slot == next.tracked_flight_slot && route_flag_buffers[endpoint_index] != NULL) {
-        heap_caps_free(route_flag_buffers[endpoint_index]);
-        route_flag_buffers[endpoint_index] = NULL;
-    }
-    if (slot == next.tracked_flight_slot) {
-        route_flag_loaded_revision[endpoint_index] = UINT32_MAX;
-        next.route_flag_valid_mask = route_flag_valid_mask_for_slot(slot);
-        next.route_flag_revision++;
-    }
-    next.revision++;
-    next.last_push_unix = (int)time(NULL);
-    write_status(&next);
-    ESP_LOGI(TAG,
-             "Route %s flag saved",
-             endpoint_index == 1 ? "destination" : "origin");
-    return send_json(req, "{\"ok\":true}");
+    if (!authorize_request(req)) return ESP_FAIL;
+    int slot=route_slot_from_request(req),kind=route_endpoint_index_from_request(req);
+    if(kind<0 || kind>1) { httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"invalid endpoint"); return ESP_FAIL; }
+    return stage_wifi_asset(req,slot,kind+2);
 }
 
 static esp_err_t radar_map_post_handler(httpd_req_t *req)
 {
+    if (!authorize_request(req)) return ESP_FAIL;
     const int range_index = radar_range_index_from_request(req);
     if (range_index < 0) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "radar range must be one of 10,20,50");
@@ -4692,20 +4827,19 @@ static esp_err_t radar_map_post_handler(httpd_req_t *req)
     char location_key[MAP_LOCATION_KEY_MAX];
     radar_location_key_from_request(req, location_key, sizeof(location_key));
 
-    char label[40];
-    snprintf(label, sizeof(label), "radar %s %.0fmi", location_key, radar_map_ranges[range_index]);
-    return receive_map(req,
-                       &radar_map_stores[range_index],
-                       label,
-                       true,
-                       range_index,
-                       -1,
-                       -1,
-                       location_key);
+    return receive_radar_map(req,range_index,location_key);
+}
+
+static void note_artwork_push(void)
+{
+    if (status_mutex) xSemaphoreTake(status_mutex,portMAX_DELAY);
+    if (status) { status->revision++; status->last_push_unix=(int)time(NULL); }
+    if (status_mutex) xSemaphoreGive(status_mutex);
 }
 
 static esp_err_t weather_city_icon_post_handler(httpd_req_t *req)
 {
+    if (!authorize_request(req)) return ESP_FAIL;
     if (req->content_len != APP_REMOTE_WEATHER_CITY_ICON_BYTES) {
         char error[96];
         snprintf(
@@ -4722,76 +4856,22 @@ static esp_err_t weather_city_icon_post_handler(httpd_req_t *req)
         req,
         location_key,
         sizeof(location_key));
-    mkdir(MAP_STORAGE_BASE_PATH "/cities", 0775);
+    if (strlen(location_key)>8) {
+        httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"invalid icon location"); return ESP_FAIL;
+    }
     char path[96];
-    weather_city_icon_path_for_key(
-        location_key,
-        path,
-        sizeof(path));
-    FILE *file = fopen(path, "wb");
-    if (file == NULL) {
-        httpd_resp_send_err(
-            req,
-            HTTPD_500_INTERNAL_SERVER_ERROR,
-            "could not open city icon file");
-        return ESP_FAIL;
-    }
-
-    uint8_t scratch[1024];
-    int received = 0;
-    bool write_ok = true;
-    while (received < req->content_len) {
-        const int remaining = req->content_len - received;
-        const int wanted =
-            remaining < (int)sizeof(scratch)
-                ? remaining
-                : (int)sizeof(scratch);
-        const int chunk =
-            httpd_req_recv(req, (char *)scratch, wanted);
-        if (chunk <= 0) {
-            if (chunk == HTTPD_SOCK_ERR_TIMEOUT) {
-                continue;
-            }
-            write_ok = false;
-            break;
-        }
-        if (fwrite(scratch, 1, chunk, file) !=
-            (size_t)chunk) {
-            write_ok = false;
-            break;
-        }
-        received += chunk;
-    }
-    if (fclose(file) != 0) {
-        write_ok = false;
-    }
-    if (!write_ok ||
-        received != APP_REMOTE_WEATHER_CITY_ICON_BYTES) {
-        unlink(path);
-        httpd_resp_send_err(
-            req,
-            HTTPD_500_INTERNAL_SERVER_ERROR,
-            "city icon receive failed");
-        return ESP_FAIL;
-    }
-
-    weather_city_icon_key[0] = '\0';
-    weather_city_icon_revision++;
+    weather_city_icon_path_for_key(location_key,path,sizeof(path));
+    if (receive_artwork(req,path,MAP_STORAGE_BASE_PATH "/cities",false,0)!=ESP_OK) return ESP_FAIL;
+    atomic_fetch_add(&weather_city_icon_revision,1);
     refresh_weather_city_icon_valid_mask();
-    app_remote_status_t next = read_status();
-    next.revision++;
-    next.last_push_unix = (int)time(NULL);
-    write_status(&next);
-    ESP_LOGI(
-        TAG,
-        "Weather city icon saved: %s (%d bytes)",
-        location_key,
-        received);
+    note_artwork_push();
+    ESP_LOGI(TAG,"Weather city icon saved: %s",location_key);
     return send_json(req, "{\"ok\":true}");
 }
 
 static esp_err_t space_asset_post_handler(httpd_req_t *req)
 {
+    if (!authorize_request(req)) return ESP_FAIL;
     char query[64];
     char name[24];
     if (httpd_req_get_url_query_str(req, query, sizeof(query)) != ESP_OK ||
@@ -4823,87 +4903,11 @@ static esp_err_t space_asset_post_handler(httpd_req_t *req)
         return ESP_FAIL;
     }
 
-    const int asset_index = (int)(asset - space_assets);
-    if (space_asset_mutex != NULL) {
-        xSemaphoreTake(space_asset_mutex, portMAX_DELAY);
-    }
-
-    mkdir(MAP_STORAGE_BASE_PATH "/space", 0775);
+    const int asset_index=(int)(asset-space_assets);
     char path[96];
-    space_asset_path(asset, path, sizeof(path));
-    FILE *file = fopen(path, "wb");
-    if (file == NULL) {
-        if (space_asset_mutex != NULL) {
-            xSemaphoreGive(space_asset_mutex);
-        }
-        httpd_resp_send_err(
-            req,
-            HTTPD_500_INTERNAL_SERVER_ERROR,
-            "could not open space asset file");
-        return ESP_FAIL;
-    }
-
-    uint8_t scratch[1024];
-    int received = 0;
-    bool write_ok = true;
-    uint32_t hash = 2166136261UL;
-    while (received < req->content_len) {
-        const int remaining = req->content_len - received;
-        const int wanted =
-            remaining < (int)sizeof(scratch)
-                ? remaining
-                : (int)sizeof(scratch);
-        const int chunk =
-            httpd_req_recv(req, (char *)scratch, wanted);
-        if (chunk <= 0) {
-            if (chunk == HTTPD_SOCK_ERR_TIMEOUT) {
-                continue;
-            }
-            write_ok = false;
-            break;
-        }
-        if (fwrite(scratch, 1, chunk, file) !=
-            (size_t)chunk) {
-            write_ok = false;
-            break;
-        }
-        hash = fnv1a_update(
-            hash,
-            scratch,
-            (size_t)chunk);
-        received += chunk;
-    }
-    if (fclose(file) != 0) {
-        write_ok = false;
-    }
-    if (!write_ok || (size_t)received != expected) {
-        unlink(path);
-        space_asset_valid_mask_cache &=
-            ~(1UL << asset_index);
-        refresh_launch_asset_valid_mask();
-        if (space_asset_mutex != NULL) {
-            xSemaphoreGive(space_asset_mutex);
-        }
-        httpd_resp_send_err(
-            req,
-            HTTPD_500_INTERNAL_SERVER_ERROR,
-            "space asset receive failed");
-        return ESP_FAIL;
-    }
-    if (hash != asset->expected_fnv1a) {
-        unlink(path);
-        space_asset_valid_mask_cache &=
-            ~(1UL << asset_index);
-        refresh_launch_asset_valid_mask();
-        if (space_asset_mutex != NULL) {
-            xSemaphoreGive(space_asset_mutex);
-        }
-        httpd_resp_send_err(
-            req,
-            HTTPD_400_BAD_REQUEST,
-            "space artwork checksum mismatch");
-        return ESP_FAIL;
-    }
+    space_asset_path(asset,path,sizeof(path));
+    if (receive_artwork(req,path,MAP_STORAGE_BASE_PATH "/space",true,asset->expected_fnv1a)!=ESP_OK) return ESP_FAIL;
+    if (space_asset_mutex) xSemaphoreTake(space_asset_mutex,portMAX_DELAY);
 
     /*
      * Never free an allocated asset from the HTTP task: an LVGL image may
@@ -4916,20 +4920,14 @@ static esp_err_t space_asset_post_handler(httpd_req_t *req)
     if (space_asset_mutex != NULL) {
         xSemaphoreGive(space_asset_mutex);
     }
-    app_remote_status_t next = read_status();
-    next.revision++;
-    next.last_push_unix = (int)time(NULL);
-    write_status(&next);
-    ESP_LOGI(
-        TAG,
-        "Space asset saved: %s (%d bytes)",
-        asset->name,
-        received);
+    note_artwork_push();
+    ESP_LOGI(TAG,"Space asset saved: %s",asset->name);
     return send_json(req, "{\"ok\":true}");
 }
 
 static esp_err_t tracker_get_handler(httpd_req_t *req)
 {
+    if (!authorize_request(req)) return ESP_FAIL;
     cJSON *snapshot = strcmp(req->uri, "/api/launches") == 0 ? app_launches_json() : app_tracker_snapshot();
     char *body = cJSON_PrintUnformatted(snapshot);
     cJSON_Delete(snapshot);
@@ -5023,22 +5021,41 @@ static void register_handlers(httpd_handle_t handle)
     httpd_register_uri_handler(handle, &data_refresh_uri);
 }
 
+static void recover_art_path(const char *path)
+{
+    app_art_result_t rc=app_artwork_recover(path);
+    if (rc!=ART_OK) ESP_LOGW(TAG,"Artwork recovery incomplete: %s (%d)",path,rc);
+}
+
+static void recover_artwork(void)
+{
+    uint64_t available; uint32_t cluster;
+    if (art_capacity(NULL,&available,&cluster)!=0) return;
+    char path[96];
+    if (space_asset_mutex) xSemaphoreTake(space_asset_mutex,portMAX_DELAY);
+    for (int i=0;i<SPACE_ASSET_COUNT;++i) {
+        space_asset_path(&space_assets[i],path,sizeof(path));
+        recover_art_path(path);
+    }
+    if (space_asset_mutex) xSemaphoreGive(space_asset_mutex);
+    for(size_t i=0;i<app_location_preset_count();++i) {
+        const app_location_preset_t *loc=app_location_preset_at(i);
+        if (!loc || !loc->key) continue;
+        if (strlen(loc->key)<=8) {
+            weather_city_icon_path_for_key(loc->key,path,sizeof(path));
+            recover_art_path(path);
+        }
+        if (strlen(loc->key)>4) continue;
+        for (int k=0;k<APP_REMOTE_RADAR_MAP_RANGE_COUNT;++k) {
+            radar_map_path_for_key(loc->key,k,path,sizeof(path));
+            recover_art_path(path);
+        }
+    }
+}
+
 static void mount_map_storage(void)
 {
-    const esp_vfs_fat_mount_config_t conf = {
-        /* Rendering, networking, cached logos, configuration persistence, and
-         * a USB route-package upload can overlap briefly. Six descriptors was
-         * enough during normal rendering but could reject the first route-map
-         * temporary file during a live sync. The FAT VFS table is inexpensive
-         * compared with the map buffers, so reserve enough descriptors for
-         * the transfer without changing asset lifetime or rendering logic. */
-        .max_files = 16,
-        .format_if_mount_failed = true,
-        .allocation_unit_size = CONFIG_WL_SECTOR_SIZE,
-        .use_one_fat = false,
-    };
-
-    esp_err_t err = esp_vfs_fat_spiflash_mount_rw_wl(MAP_STORAGE_BASE_PATH, "storage", &conf, &map_storage_wl_handle);
+    esp_err_t err = app_storage_mount(MAP_STORAGE_BASE_PATH, &map_storage_wl_handle);
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "Could not mount FAT map storage: %s", esp_err_to_name(err));
         app_remote_status_t next = read_status();
@@ -5053,9 +5070,10 @@ static void mount_map_storage(void)
     ESP_LOGI(TAG, "Storage free=%lu/%lu bytes",
              (unsigned long)storage_free_bytes, (unsigned long)storage_total_bytes);
     usb_restore_interrupted_files();
-    tracked_asset_manifest_load();
+    recover_artwork();
     load_persisted_tracked_state();
     app_tracker_load();
+    atomic_store(&banks_ready,true);
     app_launches_load();
     refresh_map_storage_index(false);
     refresh_space_asset_valid_mask();
@@ -5072,9 +5090,21 @@ static void remote_task(void *arg)
     while (true) {
         app_network_status_t net;
         app_network_get_status(&net);
-        if (server == NULL && net.wifi_connected) {
-            httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-            config.server_port = 80;
+        const unsigned epoch=atomic_load(&pairing_epoch);
+        static unsigned loaded_epoch = UINT_MAX;
+        if (serving_pair && epoch != loaded_epoch) {
+            if (server) { httpd_ssl_stop(server); server=NULL; }
+            free(serving_pair); serving_pair=NULL;
+        }
+        if (!serving_pair && loaded_epoch!=epoch) {
+            pairing_t *p = calloc(1,sizeof(*p));
+            if (p && pairing_read(p)==ESP_OK) serving_pair=p;
+            else free(p);
+            loaded_epoch=epoch;
+        }
+        if (server == NULL && serving_pair && net.wifi_connected) {
+            httpd_ssl_config_t tls = HTTPD_SSL_CONFIG_DEFAULT();
+            httpd_config_t config = tls.httpd;
             config.ctrl_port = 32768;
             /* Full queue validation/publication is deeper than a single
              * screen update. Match USB's stack budget without consuming
@@ -5087,9 +5117,16 @@ static void remote_task(void *arg)
             config.recv_wait_timeout = 15;
             config.send_wait_timeout = 15;
             config.lru_purge_enable = true;
-            if (httpd_start(&server, &config) == ESP_OK) {
+            tls.httpd = config;
+            tls.servercert = (uint8_t *)serving_pair->cert;
+            tls.servercert_len = strlen(serving_pair->cert)+1;
+            tls.prvtkey_pem = (uint8_t *)serving_pair->key;
+            tls.prvtkey_len = strlen(serving_pair->key)+1;
+            tls.tls_handshake_timeout_ms = 5000;
+            serving_epoch = loaded_epoch;
+            if (httpd_ssl_start(&server, &tls) == ESP_OK) {
                 register_handlers(server);
-                ESP_LOGI(TAG, "HTTP push receiver listening at http://%s/api/status", net.ip);
+                ESP_LOGI(TAG, "Paired HTTPS receiver ready");
             } else {
                 ESP_LOGW(TAG, "Could not start HTTP push receiver");
             }
@@ -5100,6 +5137,7 @@ static void remote_task(void *arg)
 
 void app_remote_start(void)
 {
+    boot_id = esp_random();
     app_tracker_start();
     app_launches_start();
     if (status_mutex == NULL) {
@@ -5146,12 +5184,16 @@ void app_remote_publish_tracker(const app_remote_status_t *flight, bool owns_upd
     xSemaphoreTake(status_mutex, portMAX_DELAY);
     app_remote_status_t next = *status;
     copy_tracker_fields(&next, flight);
-    bool geometry_changed = next.tracked_flight_slot != status->tracked_flight_slot ||
+    static uint32_t previous_asset_generation;
+    uint32_t current_asset_generation = app_tracker_asset_generation();
+    bool geometry_changed = previous_asset_generation != current_asset_generation ||
+        next.tracked_flight_slot != status->tracked_flight_slot ||
         next.tracked_route_point_count != status->tracked_route_point_count ||
         memcmp(next.tracked_route_points, status->tracked_route_points, sizeof(next.tracked_route_points)) != 0;
     next.tracked_route_geometry_version = status->tracked_route_geometry_version + (geometry_changed ? 1 : 0);
     tracker_owns_display = owns_updates;
-    if (memcmp(&next, status, sizeof(next)) != 0) {
+    previous_asset_generation = current_asset_generation;
+    if (geometry_changed || memcmp(&next, status, sizeof(next)) != 0) {
         if (geometry_changed) {
             next.route_map_valid_mask = route_map_valid_mask_for_slot(next.tracked_flight_slot);
             next.route_flag_valid_mask = route_flag_valid_mask_for_slot(next.tracked_flight_slot);
@@ -5232,7 +5274,8 @@ const uint8_t *app_remote_get_map(size_t *len, uint32_t *revision)
 
 const uint8_t *app_remote_get_map_for_view(int view_index, size_t *len, uint32_t *revision)
 {
-    app_remote_status_t remote = read_status();
+    map_selection_t remote;
+    read_map_selection(&remote);
     if (view_index < 0 || view_index >= APP_REMOTE_ROUTE_MAP_VIEW_COUNT) {
         view_index = 0;
     }
@@ -5247,12 +5290,12 @@ const uint8_t *app_remote_get_map_for_view(int view_index, size_t *len, uint32_t
     }
 
     char path[96];
-    route_map_path_for_view(view_index, path, sizeof(path));
+    route_map_path_for_slot_view(remote.slot, view_index, path, sizeof(path));
     char key[16];
     snprintf(key,
              sizeof(key),
              "S%u%s",
-             (unsigned)remote.tracked_flight_slot,
+             (unsigned)remote.slot,
              view_index == 1 ? "FRAME" : "GLOBE");
     release_radar_map_buffers_except(-1);
     if (!load_map_file_into_store(&route_map_store, path, key, remote.map_revision, "route")) {
@@ -5284,7 +5327,8 @@ const uint8_t *app_remote_get_route_flag(int endpoint_index,
         }
         return NULL;
     }
-    app_remote_status_t remote = read_status();
+    map_selection_t remote;
+    read_map_selection(&remote);
     if ((remote.route_flag_valid_mask & (1UL << endpoint_index)) == 0) {
         if (len != NULL) {
             *len = 0;
@@ -5309,7 +5353,7 @@ const uint8_t *app_remote_get_route_flag(int endpoint_index,
     if (route_flag_loaded_revision[endpoint_index] !=
         remote.route_flag_revision) {
         char path[96];
-        route_flag_path_for_endpoint(endpoint_index, path, sizeof(path));
+        route_flag_path_for_slot_endpoint(remote.slot, endpoint_index, path, sizeof(path));
         FILE *file = fopen(path, "rb");
         if (file == NULL ||
             fread(route_flag_buffers[endpoint_index],
@@ -5364,7 +5408,8 @@ const uint8_t *app_remote_get_weather_city_icon(
             return NULL;
         }
     }
-    if (strcasecmp(weather_city_icon_key, key) != 0) {
+    uint32_t wanted_revision=atomic_load(&weather_city_icon_revision);
+    if (weather_city_icon_loaded_revision!=wanted_revision || strcasecmp(weather_city_icon_key, key) != 0) {
         FILE *file = fopen(path, "rb");
         if (file == NULL ||
             fread(
@@ -5382,12 +5427,13 @@ const uint8_t *app_remote_get_weather_city_icon(
             weather_city_icon_key,
             sizeof(weather_city_icon_key),
             key);
+        weather_city_icon_loaded_revision=wanted_revision;
     }
     if (len != NULL) {
         *len = APP_REMOTE_WEATHER_CITY_ICON_BYTES;
     }
     if (revision != NULL) {
-        *revision = weather_city_icon_revision;
+        *revision = weather_city_icon_loaded_revision;
     }
     return weather_city_icon_buffer;
 }
@@ -5587,7 +5633,8 @@ const uint8_t *app_remote_get_radar_map_for_location(
     uint32_t *revision,
     int *range_index)
 {
-    app_remote_status_t remote = read_status();
+    map_selection_t remote;
+    read_map_selection(&remote);
     const int index = app_remote_radar_range_index_for_miles(miles);
     if (range_index != NULL) {
         *range_index = index;

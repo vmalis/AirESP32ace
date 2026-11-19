@@ -3,6 +3,7 @@
 
 import AppKit
 import Foundation
+import IOKit
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -71,10 +72,12 @@ struct DeviceManagementView: View {
     @State private var customFirmwareURL: URL?
     @State private var setupError: String?
     @State private var pendingInstallation: PendingInstallation?
+    @State private var confirmedCandidate: DeviceSerialPortCandidate?
 
     private enum PendingInstallation {
         case firmware
         case newDevice
+        case pair
     }
 
     private enum Step: Equatable {
@@ -116,7 +119,7 @@ struct DeviceManagementView: View {
         case .firmwareSuccess:
             .success(
                 title: "Firmware updated",
-                detail: "The tracker restarted with the new firmware. Its Wi-Fi, API, city, and display settings were preserved."
+                detail: "The tracker booted the selected firmware. The settings partition was not rewritten."
             )
         case .chooser, .none:
             .chooser
@@ -214,18 +217,35 @@ struct DeviceManagementView: View {
                 pendingInstallation = nil
             }
             Button(
-                pendingInstallation == .newDevice
-                    ? "Erase & Set Up"
-                    : "Install Firmware",
+                pendingInstallation == .newDevice ? "Erase & Set Up" :
+                    pendingInstallation == .pair ? "Pair This Mac" : "Install Firmware",
                 role: .destructive
             ) {
                 let action = pendingInstallation
                 pendingInstallation = nil
+                guard let candidate = confirmedCandidate,
+                      candidate == installer.selectedCandidate,
+                      DeviceSerialDiscovery.serialCandidates().contains(candidate) else {
+                    step = .failure(title: "USB target changed", detail: "Reconnect the intended device and confirm again.")
+                    return
+                }
                 switch action {
                 case .firmware:
                     performFirmwareInstallation()
                 case .newDevice:
                     performNewDeviceInstallation()
+                case .pair:
+                    step = .working(title: "Pairing this Mac")
+                    Task {
+                        do {
+                            let id = try await USBConfigurationClient.identity(port: candidate.path, pairing: true,
+                                                                               expectedBoard: candidate.macIdentity)
+                            if !id.ip.isEmpty && id.ip != "0.0.0.0" { model.deviceHost = id.ip }
+                            step = .success(title: "Device paired", detail: "USB identity verified. Wi-Fi sync now uses encrypted requests to this tracker.")
+                        } catch {
+                            step = .failure(title: "Pairing failed", detail: error.localizedDescription)
+                        }
+                    }
                 case .none:
                     break
                 }
@@ -320,6 +340,12 @@ struct DeviceManagementView: View {
                 }
             }
             .frame(maxWidth: 540)
+
+            Button("Pair This Mac over USB…") {
+                confirmedCandidate = installer.selectedCandidate
+                pendingInstallation = .pair
+            }
+            .disabled(installer.selectedCandidate == nil)
 
             Spacer(minLength: 18)
         }
@@ -716,8 +742,11 @@ struct DeviceManagementView: View {
     }
 
     private var usbConfirmationMessage: String {
-        guard let candidate = installer.selectedCandidate else {
+        guard let candidate = confirmedCandidate else {
             return "No USB device is selected. Cancel and connect AirESP32ace with a USB-C data cable."
+        }
+        if pendingInstallation == .pair {
+            return "Pair this Mac with:\n\n\(candidate.confirmationDescription)\n\nThis replaces the Mac’s previous board pairing and revokes this tracker’s previous Wi-Fi credentials for companion access. Your home Wi-Fi password and API keys are unchanged."
         }
         let action = pendingInstallation == .newDevice
             ? "erase and configure"
@@ -857,6 +886,7 @@ struct DeviceManagementView: View {
 
     private func requestFirmwareInstallation() {
         guard installer.selectedCandidate != nil else { return }
+        confirmedCandidate = installer.selectedCandidate
         pendingInstallation = .firmware
     }
 
@@ -867,7 +897,7 @@ struct DeviceManagementView: View {
             case .success:
                 step = .success(
                     title: "Firmware updated",
-                    detail: "The tracker restarted with the new firmware. Its Wi-Fi, API, city, and display settings were preserved."
+                    detail: "The tracker booted the selected firmware. The settings partition was not rewritten. If this is your first secure update, choose Pair This Mac over USB."
                 )
             case let .failure(error):
                 step = .failure(
@@ -886,6 +916,7 @@ struct DeviceManagementView: View {
         }
         setupError = nil
         guard installer.selectedCandidate != nil else { return }
+        confirmedCandidate = installer.selectedCandidate
         pendingInstallation = .newDevice
     }
 
@@ -934,7 +965,7 @@ struct DeviceManagementView: View {
             case .success:
                 step = .success(
                     title: "Firmware installed",
-                    detail: "Check Wi-Fi on the tracker’s Settings page. In the companion’s Settings, enter its assigned IP address, then choose Install device content to add all city maps and Space artwork."
+                    detail: "The installed image booted. Choose Pair This Mac over USB before installing city maps and Space artwork. Pairing reads the tracker’s assigned Wi-Fi address."
                 )
             case let .failure(error):
                 step = .failure(
@@ -1224,6 +1255,8 @@ final class DeviceFirmwareInstaller: ObservableObject {
         customImage: URL?,
         completion: @escaping @MainActor @Sendable (Result<Void, Error>) -> Void
     ) {
+        do { try FirmwareUpdateSafety.checkExclusiveCompanion() }
+        catch { completion(.failure(error)); return }
         guard let port = serialPort else {
             completion(.failure(DeviceFirmwareError.deviceNotConnected))
             return
@@ -1245,6 +1278,8 @@ final class DeviceFirmwareInstaller: ObservableObject {
         configuration: DeviceProvisioningConfiguration,
         completion: @escaping @MainActor @Sendable (Result<Void, Error>) -> Void
     ) {
+        do { try FirmwareUpdateSafety.checkExclusiveCompanion() }
+        catch { completion(.failure(error)); return }
         guard let port = serialPort else {
             completion(.failure(DeviceFirmwareError.deviceNotConnected))
             return
@@ -1360,9 +1395,22 @@ final class DeviceFirmwareInstaller: ObservableObject {
             arguments.append(String(format: "0x%x", offset))
             arguments.append(url.path)
         }
+        guard let image = segments.first(where: { $0.0 == 0x10000 })?.1,
+              let bytes = try? Data(contentsOf: image, options: .mappedIfSafe),
+              let expected = try? USBConfigurationClient.imageELFDigest(bytes),
+              let target = selectedCandidate else {
+            finishOperation()
+            completion(.failure(DeviceFirmwareError.toolFailed("Not a verifiable ESP-IDF application image.")))
+            return
+        }
         statusText = "Waiting for exclusive USB access…"
         Task {
             serialAccess = await Task.detached { USBSerialAccess.acquire() }.value
+            do { try FirmwareUpdateSafety.checkExclusiveCompanion() }
+            catch { finishOperation(); completion(.failure(error)); return }
+            guard DeviceSerialDiscovery.serialCandidates().contains(target) else {
+                finishOperation(); completion(.failure(PairingFailure.identity)); return
+            }
             statusText = "Writing firmware to the tracker…"
             runProcess(
                 executable: tool,
@@ -1373,11 +1421,18 @@ final class DeviceFirmwareInstaller: ObservableObject {
                 switch result {
                 case .success:
                     self.progress = 1.0
-                    self.statusText = "Restarting the tracker…"
+                    self.statusText = "Verifying that the selected image booted…"
                     Task { @MainActor in
-                        try? await Task.sleep(for: .milliseconds(650))
-                        self.finishOperation()
-                        completion(.success(()))
+                        do {
+                            _ = try await Task.detached {
+                                try USBConfigurationClient.verifyBoot(port: port, expected: expected,
+                                                                      expectedBoard: target.macIdentity)
+                            }.value
+                            self.finishOperation()
+                            completion(.success(()))
+                        } catch {
+                            self.finishOperation(); completion(.failure(error))
+                        }
                     }
                 case let .failure(error):
                     self.finishOperation()
@@ -1431,17 +1486,11 @@ final class DeviceFirmwareInstaller: ObservableObject {
                 if finished.terminationStatus == 0 {
                     completion(.success(()))
                 } else {
-                    let detail = self.processOutput
-                        .split(separator: "\n")
-                        .suffix(5)
-                        .joined(separator: "\n")
+                    let detail = FirmwareUpdateSafety.failureMessage(output: self.processOutput,
+                        status: finished.terminationStatus, flashing: parseFlashProgress)
                     completion(
                         .failure(
-                            DeviceFirmwareError.toolFailed(
-                                detail.isEmpty
-                                    ? "The ESP32 flasher exited with code \(finished.terminationStatus)."
-                                    : detail
-                            )
+                            DeviceFirmwareError.toolFailed(detail)
                         )
                     )
                 }
@@ -1524,6 +1573,13 @@ struct DeviceSerialPortCandidate: Equatable {
     let productID: Int?
     let vendorName: String?
     let productName: String?
+    var hardwareSerial: String? = nil
+
+    var macIdentity: String? {
+        guard vendorID == 0x303a, productID == 0x1001, let hardwareSerial else { return nil }
+        let digits = hardwareSerial.replacingOccurrences(of: ":", with: "").uppercased()
+        return digits.count == 12 && digits.allSatisfy(\.isHexDigit) ? digits : nil
+    }
 
     var preferenceScore: Int {
         let filename = URL(fileURLWithPath: path).lastPathComponent.lowercased()
@@ -1585,14 +1641,19 @@ struct DeviceSerialPortCandidate: Equatable {
         } else {
             usbIDs = "USB identity unavailable"
         }
-        return [identity.isEmpty ? "USB serial device" : identity, port, usbIDs]
+        return [identity.isEmpty ? "USB serial device" : identity, port, usbIDs, hardwareSerial.map { "Serial: \($0)" }]
+            .compactMap { $0 }
             .joined(separator: "\n")
     }
 }
 
 enum DeviceSerialDiscovery {
     static func preferredPort() -> String? {
-        preferredCandidate(from: serialCandidates())?.path
+        let candidates = serialCandidates()
+        if let id = DevicePairing.stored()?.deviceId,
+           let match = candidates.first(where: { $0.macIdentity == id }) { return match.path }
+        // Never choose between several unverified boards for a background action.
+        return candidates.count == 1 ? candidates[0].path : nil
     }
 
     static func preferredCandidate(
@@ -1608,7 +1669,26 @@ enum DeviceSerialDiscovery {
     }
 
     static func serialCandidates() -> [DeviceSerialPortCandidate] {
-        filesystemCandidates()
+        var iterator: io_iterator_t = 0
+        guard IOServiceGetMatchingServices(kIOMainPortDefault, IOServiceMatching("IOSerialBSDClient"), &iterator) == KERN_SUCCESS else { return [] }
+        defer { IOObjectRelease(iterator) }
+        var found: [DeviceSerialPortCandidate] = []
+        while true {
+            let entry = IOIteratorNext(iterator)
+            guard entry != 0 else { break }
+            defer { IOObjectRelease(entry) }
+            func property(_ name: String) -> AnyObject? {
+                IORegistryEntrySearchCFProperty(entry, kIOServicePlane, name as CFString, kCFAllocatorDefault,
+                    IOOptionBits(kIORegistryIterateRecursively | kIORegistryIterateParents))
+            }
+            guard let path = property("IOCalloutDevice") as? String, isSupportedSerialPath(path) else { continue }
+            found.append(.init(path: path, vendorID: (property("idVendor") as? NSNumber)?.intValue,
+                               productID: (property("idProduct") as? NSNumber)?.intValue,
+                               vendorName: property("USB Vendor Name") as? String,
+                               productName: property("USB Product Name") as? String,
+                               hardwareSerial: property("USB Serial Number") as? String))
+        }
+        return found.sorted { $0.path < $1.path }
     }
 
     private static func filesystemCandidates()
@@ -1641,6 +1721,8 @@ enum DeviceSerialDiscovery {
 }
 
 enum DeviceFirmwareError: LocalizedError {
+    case anotherCompanion
+    case serialInUse
     case deviceNotConnected
     case firmwareMissing
     case installerToolMissing
@@ -1648,6 +1730,10 @@ enum DeviceFirmwareError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
+        case .anotherCompanion:
+            "Another copy of AirESP32ace is open. Quit the other copy before using USB, then retry in this window."
+        case .serialInUse:
+            "Another USB operation holds this port. Wait for it to finish before retrying."
         case .deviceNotConnected:
             "Connect the tracker with a USB-C data cable and try again."
         case .firmwareMissing:

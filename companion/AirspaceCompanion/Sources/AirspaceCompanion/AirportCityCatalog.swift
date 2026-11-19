@@ -23,15 +23,30 @@ enum AirportCityCatalog {
     }()
 
     static func city(for airport: Airport) -> String? {
+        verifiedEntry(for: airport)?.city
+    }
+
+    private static let flagCountries = Set(Locale.Region.isoRegions.map(\.identifier))
+        .filter { $0.utf8.count == 2 && $0 != "ZZ" && $0 != "XX" }.union(["XK"])
+
+    static func flagCountry(for airport: Airport) -> String? {
+        if let supplied = airport.countryCode?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(),
+           flagCountries.contains(supplied) { return supplied }
+        guard let country = verifiedEntry(for: airport, checkReportedCountry: false)?.country,
+              flagCountries.contains(country) else { return nil }
+        return country
+    }
+
+    private static func verifiedEntry(for airport: Airport, checkReportedCountry: Bool = true) -> Entry? {
         let code = airport.code.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         guard let entry = entries[code] else { return nil }
-        if let country = airport.countryCode?.trimmingCharacters(in: .whitespacesAndNewlines),
+        if checkReportedCountry, let country = airport.countryCode?.trimmingCharacters(in: .whitespacesAndNewlines),
            !country.isEmpty, country.uppercased() != entry.country { return nil }
         // A reused code must not relabel an airport on another continent.
         guard CLLocationCoordinate2DIsValid(airport.coordinate),
               CLLocation(latitude: airport.coordinate.latitude, longitude: airport.coordinate.longitude)
                 .distance(from: CLLocation(latitude: entry.latitude, longitude: entry.longitude)) < 100_000
         else { return nil }
-        return entry.city
+        return entry
     }
 }

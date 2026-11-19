@@ -18,7 +18,7 @@ The database is Mac-only, needs no extra provider requests, and does not change 
 - Confirmed delays update ETD and show an amber `DELAYED - DEPARTS IN` heading. A matched on-time update clears it.
 - Scheduled flights cannot inherit live aircraft motion from another occurrence using the same callsign or airframe. Cached preflight motion is cleared; active flights retain the last valid telemetry fields.
 - FlightAware is the primary schedule/gate source. The device checks its next flight every six hours beyond 24 hours, hourly within 24 hours, and every ten minutes within two hours. In-flight metadata cadence is 30 minutes for short flights and one hour for longer flights, becoming five minutes near/after ETA.
-- OpenSky supplies airborne positions and telemetry. Flight identity and sample age are checked separately from radio contact age. FlightAware position fallback is limited to once per five minutes, including failed attempts; recovery of OpenSky does not reset that cooldown.
+- OpenSky supplies airborne positions and telemetry. Motion refreshes are considered every minute, subject to a shared per-board credit budget. Radar normally refreshes every 90 seconds and reserves credits while Tracker is requesting observations. HTTP 429 defers state requests. Flight identity and sample age are checked separately from radio contact age. FlightAware position fallback is limited to once per five minutes, including failed attempts; recovery of OpenSky does not reset that cooldown.
 - AirLabs is a schedule/enrichment fallback and can confirm completion after ETA. Route and departure-window matching are required; empty responses do not clear a valid flight.
 - During gaps, progress may be estimated from the latest position and ETA. Estimates are labeled, can be corrected by fresh coordinates, and cannot declare touchdown or reach 100%.
 - Arrived flights remain available for two hours unless the next prepared flight is due. Active flights retain priority. Days-old unconfirmed occurrences expire at the existing ETA-plus-24-hours cutoff.
@@ -27,10 +27,10 @@ Network work runs in the background data worker, never in rendering. Existing ma
 
 ## USB firmware updates
 
-Firmware updates require USB-C; Wi-Fi supports normal autonomous operation and flight synchronization. **Update Firmware** preserves settings and content. **Set Up New Device** erases the board.
+Firmware updates require USB-C; Wi-Fi supports normal autonomous operation and flight synchronization. **Update Firmware** preserves settings and content. **Set Up New Device** erases the board. With v0.1.5, pair the intended instrument over USB using **Pair This Mac** before using pinned HTTPS for wireless control. Radios and providers on the instrument work independently of the paired Mac.
 
 Configuration, telemetry, asset transfers, and the installer share an exclusive USB lease. Flashing waits for active requests, owns the port through completion, and releases it on failure. Background polls cannot inject commands into esptool. The updater uses the supported ESP32-S3 watchdog reset so the application boots after writing.
 
 ## Verification
 
-The release includes XCTest coverage for city resolution, identity guards, countdown gates, native rendering, provider handling, and USB ownership; sanitizer-enabled tracker/remote-state tests; and an actual-ESP32 stack-frame guard. Both physical boards were updated through the companion. The populated board retained its complete queue and passed repeated cross-world screen checks. See [v0.1.4 release notes](../release/v0.1.4-notes.txt) for the verification summary.
+The project includes XCTest coverage for city resolution, occurrence matching, countdown gates, rendering, provider handling and USB ownership; host Tracker/storage policy tests; and checks on the compiled ESP32 display stack frames. See the [v0.1.5 release notes](../release/v0.1.5-notes.txt) for measured hardware results and outstanding tests.

@@ -34,6 +34,10 @@ struct DeviceTrackerSnapshot: Decodable, Sendable {
             guard let timestamp, timestamp > 0 else { return nil }
             return Date(timeIntervalSince1970: Double(timestamp))
         }
+        func field(_ received: String?, previous: String?) -> String? {
+            guard let received else { return previous }
+            return received.isEmpty ? nil : received
+        }
         let arrival = date(estimatedArrivalUnix) ?? flight.estimatedArrival
         let eta: String? = arrival.map {
             let formatter = DateFormatter()
@@ -66,10 +70,10 @@ struct DeviceTrackerSnapshot: Decodable, Sendable {
             estimatedArrival: arrival,
             actualArrival: date(actualArrivalUnix) ?? flight.actualArrival,
             routeDistanceKilometers: flight.routeDistanceKilometers,
-            originTerminal: originTerminal ?? flight.originTerminal,
-            originGate: originGate ?? flight.originGate,
-            destinationTerminal: destinationTerminal ?? flight.destinationTerminal,
-            destinationGate: destinationGate ?? flight.destinationGate
+            originTerminal: field(originTerminal, previous: flight.originTerminal),
+            originGate: field(originGate, previous: flight.originGate),
+            destinationTerminal: field(destinationTerminal, previous: flight.destinationTerminal),
+            destinationGate: field(destinationGate, previous: flight.destinationGate)
         )
     }
 }

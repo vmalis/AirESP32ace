@@ -169,18 +169,22 @@ struct DeviceClient: Sendable {
         let url = try url(host: host, path: "/api/status")
         var request = URLRequest(url: url)
         request.timeoutInterval = controlTimeout
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await PairedDeviceSession.current().data(for: request)
         try validate(response: response, data: data)
         return String(data: data, encoding: .utf8) ?? "{}"
     }
 
     func fetchTracker(host: String) async throws -> DeviceTrackerSnapshot {
+        try JSONDecoder().decode(DeviceTrackerSnapshot.self, from: await fetchTrackerData(host: host))
+    }
+
+    func fetchTrackerData(host: String) async throws -> Data {
         var request = URLRequest(url: try url(host: host, path: "/api/tracker"))
         request.timeoutInterval = controlTimeout
         let data: Data
         let response: URLResponse
         do {
-            (data, response) = try await URLSession.shared.data(for: request)
+            (data, response) = try await PairedDeviceSession.current().data(for: request)
         } catch {
             if CommandLine.arguments.contains("--trace-sync") {
                 let failure = error as NSError
@@ -194,13 +198,13 @@ struct DeviceClient: Sendable {
             throw error
         }
         try validate(response: response, data: data)
-        return try JSONDecoder().decode(DeviceTrackerSnapshot.self, from: data)
+        return data
     }
 
     func fetchLaunches(host: String) async throws -> DeviceLaunchSnapshot {
         var request = URLRequest(url: try url(host: host, path: "/api/launches"))
         request.timeoutInterval = controlTimeout
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await PairedDeviceSession.current().data(for: request)
         try validate(response: response, data: data)
         return try JSONDecoder().decode(DeviceLaunchSnapshot.self, from: data)
     }
@@ -217,6 +221,25 @@ struct DeviceClient: Sendable {
         try await pushTrackerQueue(host: host, data: data)
     }
 
+    /// The ESP32 has no worldwide timezone database. Prescribe actual offset
+    /// changes from Foundation once; delayed ETDs/ETAs and the local clocks
+    /// can then be recalculated by the device without another Mac sync.
+    static func offsetSteps(zoneID: String?, from start: Date, through end: Date) throws -> [[Int64]] {
+        guard let zoneID, let zone = TimeZone(identifier: zoneID) else { return [] }
+        var cursor = start
+        var steps = [[Int64(cursor.timeIntervalSince1970), Int64(zone.secondsFromGMT(for: cursor))]]
+        while let next = zone.nextDaylightSavingTimeTransition(after: cursor),
+              next > cursor, next <= end {
+            let offset = Int64(zone.secondsFromGMT(for: next.addingTimeInterval(1)))
+            if offset != steps.last?[1] {
+                guard steps.count < 12 else { throw CocoaError(.validationMissingMandatoryProperty) }
+                steps.append([Int64(next.timeIntervalSince1970), offset])
+            }
+            cursor = next.addingTimeInterval(1)
+        }
+        return steps
+    }
+
     func encodedTrackerQueue(
         flights: [(plan: PlannedFlight, flight: TrackedFlight)],
         credentials: DeviceConfigPayload.Credentials
@@ -231,6 +254,8 @@ struct DeviceClient: Sendable {
             let seed = try encodedState(style: .cartographicGlass,
                 routeProgress: flight.routeProgress ?? 0, flight: flight, deviceSlot: slot)
             var item = try JSONSerialization.jsonObject(with: seed) as! [String: Any]
+            let start = min(Date(), departure).addingTimeInterval(-2 * 86400)
+            let end = max(Date(), flight.estimatedArrival ?? departure).addingTimeInterval(14 * 86400)
             item["tracking"] = [
                 "planId": plan.id.uuidString,
                 "providerId": plan.selectedProviderIdentifier?.hasPrefix("airlabs-") == true
@@ -240,6 +265,8 @@ struct DeviceClient: Sendable {
                 "originLongitude": flight.origin.coordinate.longitude,
                 "destinationLatitude": flight.destination.coordinate.latitude,
                 "destinationLongitude": flight.destination.coordinate.longitude,
+                "originOffsetSteps": try Self.offsetSteps(zoneID: flight.origin.timeZoneIdentifier, from: start, through: end),
+                "destinationOffsetSteps": try Self.offsetSteps(zoneID: flight.destination.timeZoneIdentifier, from: start, through: end),
             ]
             queue.append(item)
         }
@@ -256,7 +283,7 @@ struct DeviceClient: Sendable {
         request.timeoutInterval = controlTimeout
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = data
-        let (body, response) = try await URLSession.shared.data(for: request)
+        let (body, response) = try await PairedDeviceSession.current().data(for: request)
         try validate(response: response, data: body)
     }
 
@@ -280,6 +307,12 @@ struct DeviceClient: Sendable {
         let launchAssetMask: Int?
         let spaceAssetFileMask: Int?
         var radarMapInventory: String? = nil
+        var locationKey: String? = nil
+        var lat: String? = nil
+        var lon: String? = nil
+        var radarRadiusMiles: Int? = nil
+        var storageFreeBytes: Int? = nil
+        var storageWriteErrno: Int? = nil
         var weatherCityIconMask: Int? = nil
         let batteryAvailable: Bool?
         let batteryPresent: Bool?
@@ -404,7 +437,7 @@ struct DeviceClient: Sendable {
         request.timeoutInterval = controlTimeout
         request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
         request.httpBody = Data()
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await PairedDeviceSession.current().data(for: request)
         try validate(response: response, data: data)
     }
 
@@ -473,7 +506,10 @@ struct DeviceClient: Sendable {
     ) async throws {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.timeoutInterval = bitmapTimeout
+        let standaloneArtwork = ["/api/radar-map", "/api/weather-city-icon", "/api/space-asset"].contains(url.path)
+        request.timeoutInterval = standaloneArtwork ? 120 : bitmapTimeout
+        let hash = rgb565.reduce(UInt32(2166136261)) { ($0 ^ UInt32($1)) &* 16777619 }
+        request.setValue(String(format: "%08x",hash), forHTTPHeaderField: "X-Asset-FNV32")
         request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
         request.setValue("\(rgb565.count)", forHTTPHeaderField: "Content-Length")
 
@@ -481,13 +517,13 @@ struct DeviceClient: Sendable {
         let response: URLResponse
         if let progress {
             let delegate = BitmapUploadProgressDelegate(progress: progress)
-            (data, response) = try await URLSession.shared.upload(
+            (data, response) = try await PairedDeviceSession.current().upload(
                 for: request,
                 from: rgb565,
                 delegate: delegate
             )
         } else {
-            (data, response) = try await URLSession.shared.upload(
+            (data, response) = try await PairedDeviceSession.current().upload(
                 for: request,
                 from: rgb565
             )
@@ -503,6 +539,11 @@ struct DeviceClient: Sendable {
         trackingActive: Bool = true,
         deviceSlot: Int = 0
     ) throws -> Data {
+        // Switching to Radar, including after Rebuild Maps, is navigation.
+        // Never publish the Mac's cached flight or touch the device's queue.
+        if style == .xdrRadar {
+            return try JSONEncoder().encode(["style": style.rawValue])
+        }
         let flight = flight.reconciledTerminalState()
         let airlineIata = String(
             flight.marketingNumber
@@ -548,10 +589,10 @@ struct DeviceClient: Sendable {
                 aircraftTypeCode: flight.aircraftTypeCode,
                 origin: flight.origin.code,
                 originCity: flight.origin.displayCity,
-                originCountryCode: flight.origin.countryCode,
+                originCountryCode: AirportCityCatalog.flagCountry(for: flight.origin),
                 destination: flight.destination.code,
                 destinationCity: flight.destination.displayCity,
-                destinationCountryCode: flight.destination.countryCode,
+                destinationCountryCode: AirportCityCatalog.flagCountry(for: flight.destination),
                 originTerminal: flight.originTerminal,
                 originGate: flight.originGate,
                 destinationTerminal: flight.destinationTerminal,
@@ -622,7 +663,7 @@ struct DeviceClient: Sendable {
             trackingActive: trackingActive,
             deviceSlot: deviceSlot
         )
-        let (data, response) = try await URLSession.shared.upload(for: request, from: body)
+        let (data, response) = try await PairedDeviceSession.current().upload(for: request, from: body)
         try validate(response: response, data: data)
     }
 
@@ -642,7 +683,7 @@ struct DeviceClient: Sendable {
             routePoints: []
         )
         let body = try JSONEncoder().encode(payload)
-        let (data, response) = try await URLSession.shared.upload(
+        let (data, response) = try await PairedDeviceSession.current().upload(
             for: request,
             from: body
         )
@@ -673,7 +714,7 @@ struct DeviceClient: Sendable {
         let body = try JSONEncoder().encode(
             RouteGeometryPayload(routePoints: routePoints)
         )
-        let (data, response) = try await URLSession.shared.upload(
+        let (data, response) = try await PairedDeviceSession.current().upload(
             for: request,
             from: body
         )
@@ -740,7 +781,7 @@ struct DeviceClient: Sendable {
         )
         let body = try JSONEncoder().encode(payload)
         let (data, response) =
-            try await URLSession.shared.upload(
+            try await PairedDeviceSession.current().upload(
                 for: request,
                 from: body
             )
@@ -754,7 +795,7 @@ struct DeviceClient: Sendable {
         let url = try url(host: host, path: mapInventory ? "/api/status?mapInventory=1" : "/api/status")
         var request = URLRequest(url: url)
         request.timeoutInterval = controlTimeout
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await PairedDeviceSession.current().data(for: request)
         try validate(response: response, data: data)
         return try JSONDecoder().decode(StatusSnapshot.self, from: data)
     }
@@ -763,7 +804,7 @@ struct DeviceClient: Sendable {
         let url = try url(host: host, path: "/api/aircraft")
         var request = URLRequest(url: url)
         request.timeoutInterval = 3
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await PairedDeviceSession.current().data(for: request)
         try validate(response: response, data: data)
         return try JSONDecoder().decode(AircraftSnapshot.self, from: data)
     }
@@ -772,7 +813,7 @@ struct DeviceClient: Sendable {
         let url = try url(host: host, path: "/api/weather")
         var request = URLRequest(url: url)
         request.timeoutInterval = 3
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await PairedDeviceSession.current().data(for: request)
         try validate(response: response, data: data)
         return try JSONDecoder().decode(WeatherSnapshot.self, from: data)
     }
@@ -781,7 +822,7 @@ struct DeviceClient: Sendable {
         let url = try url(host: host, path: "/api/config")
         var request = URLRequest(url: url)
         request.timeoutInterval = controlTimeout
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await PairedDeviceSession.current().data(for: request)
         try validate(response: response, data: data)
         return try JSONDecoder().decode(SharedConfiguration.self, from: data)
     }
@@ -797,7 +838,7 @@ struct DeviceClient: Sendable {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
         let body = try JSONEncoder().encode(payload)
-        let (data, response) = try await URLSession.shared.upload(for: request, from: body)
+        let (data, response) = try await PairedDeviceSession.current().upload(for: request, from: body)
         try validate(response: response, data: data)
         return try JSONDecoder().decode(SharedConfiguration.self, from: data)
     }
@@ -808,17 +849,23 @@ struct DeviceClient: Sendable {
         request.httpMethod = "POST"
         request.timeoutInterval = controlTimeout
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await PairedDeviceSession.current().data(for: request)
         try validate(response: response, data: data)
         return String(data: data, encoding: .utf8) ?? "{}"
     }
 
-    private func url(host: String, path: String) throws -> URL {
+    func url(host: String, path: String) throws -> URL {
         let trimmed = host.trimmingCharacters(in: .whitespacesAndNewlines)
-        let base = trimmed.hasPrefix("http://") || trimmed.hasPrefix("https://")
-            ? trimmed
-            : "http://\(trimmed)"
-        guard let url = URL(string: "\(base)\(path)") else {
+        let supplied = trimmed.contains("://") ? trimmed : "https://\(trimmed)"
+        guard var component = URLComponents(string: supplied),
+              ["http","https"].contains(component.scheme?.lowercased() ?? ""),
+              component.host?.isEmpty == false, component.user == nil, component.password == nil,
+              component.path.isEmpty || component.path == "/", component.query == nil, component.fragment == nil
+        else { throw DeviceClientError.badHost(host) }
+        component.scheme = "https"
+        component.path = ""
+        guard path.hasPrefix("/api/"), !path.contains("\\"), let base = component.url,
+              let url = URL(string: path, relativeTo: base)?.absoluteURL, url.host == base.host else {
             throw DeviceClientError.badHost(host)
         }
         return url
@@ -857,6 +904,14 @@ private final class BitmapUploadProgressDelegate: NSObject,
     ) {
         self.progress = progress
     }
+
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest,
+        completionHandler: @escaping (URLRequest?) -> Void
+    ) { completionHandler(nil) }
 
     func urlSession(
         _ session: URLSession,

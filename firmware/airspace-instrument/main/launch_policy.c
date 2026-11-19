@@ -75,9 +75,35 @@ int64_t app_launch_interval(const app_launch_entry_t *e, int64_t now)
     int64_t until = e->launch.net_unix - now;
     return until <= 6 * 3600 ? 300 : until <= 86400 ? 1800 : 6 * 3600;
 }
+int64_t app_launch_next_check(const app_launch_entry_t *e, int64_t now)
+{
+    int64_t due = now + app_launch_interval(e, now);
+    if (e->launch.valid && !app_launch_terminal(e->status_id)) {
+        const int thresholds[] = {86400, 21600};
+        for (unsigned i = 0; i < 2; i++) {
+            int64_t boundary = e->launch.net_unix - thresholds[i];
+            if (boundary > now && due > boundary) due = boundary;
+        }
+    }
+    return due;
+}
+bool app_launch_stale_for_mask(const app_launch_entry_t *e, int64_t now, uint8_t enabled)
+{
+    if (!e->checked || now < e->checked) return true;
+    /* A confirmed final result is historical, not a missed live sample. */
+    if (app_launch_terminal(e->status_id)) return false;
+    unsigned programs = 0;
+    for (unsigned i = 0; i < 3; i++) programs += (enabled >> i) & 1;
+    int64_t fair_interval = (programs ? programs : 1) * (3600 / APP_LAUNCH_REQUESTS_PER_HOUR);
+    int64_t grace = app_launch_interval(e, now);
+    if (grace < fair_interval) grace = fair_interval;
+    int64_t due = app_launch_next_check(e, e->checked);
+    if (due < e->checked + fair_interval) due = e->checked + fair_interval;
+    return now > due + grace;
+}
 bool app_launch_stale(const app_launch_entry_t *e, int64_t now)
 {
-    return !e->checked || now < e->checked || now - e->checked > 2 * app_launch_interval(e, now);
+    return app_launch_stale_for_mask(e, now, 1);
 }
 int64_t app_launch_failure_interval(unsigned failures)
 {
@@ -92,7 +118,8 @@ int64_t app_launch_budget_due(const int64_t attempts[APP_LAUNCH_REQUESTS_PER_HOU
         if (attempts[i] > latest) latest = attempts[i];
         if (attempts[i] > now - 3600) { count++; if (attempts[i] < oldest) oldest = attempts[i]; }
     }
-    int64_t due = latest ? latest + 60 : now;
+    /* Pace reservations rather than exhausting the full hour in a burst. */
+    int64_t due = latest ? latest + 3600 / APP_LAUNCH_REQUESTS_PER_HOUR : now;
     if (count == APP_LAUNCH_REQUESTS_PER_HOUR && due < oldest + 3601) due = oldest + 3601;
     return due;
 }
@@ -191,6 +218,6 @@ bool app_launch_accept(app_launch_entry_t *e, const cJSON *json, unsigned a, int
     if (app_launch_terminal(status) && !e->completed) e->completed = now;
     e->checked = now;
     e->failures = 0;
-    e->next_check = now + app_launch_interval(e, now);
+    e->next_check = app_launch_next_check(e, now);
     return true;
 }

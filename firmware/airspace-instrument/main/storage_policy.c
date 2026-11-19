@@ -29,3 +29,15 @@ bool app_storage_can_replace(uint64_t free_bytes, uint64_t replaced_bytes,
         free_bytes > UINT64_MAX - replaced_bytes) return false;
     return free_bytes + replaced_bytes >= incoming_bytes + APP_STORAGE_STATE_RESERVE;
 }
+
+bool app_storage_is_erased(size_t volume_size, uint8_t *scratch, size_t sector_size,
+                           app_storage_sector_reader read_sector, void *ctx)
+{
+    if (!read_sector || !scratch || !sector_size || !volume_size || volume_size % sector_size)
+        return false;
+    for (size_t offset = 0; offset < volume_size; offset += sector_size) {
+        if (read_sector(ctx, offset, scratch, sector_size) != sector_size) return false;
+        for (size_t i = 0; i < sector_size; ++i) if (scratch[i] != UINT8_MAX) return false;
+    }
+    return true;
+}
